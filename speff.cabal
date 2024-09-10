@@ -87,7 +87,6 @@ library
     Sp.Error
     Sp.Internal.Env
     Sp.Internal.Monad
-    Sp.Util
     Sp.NonDet
     Sp.Reader
     Sp.State
@@ -130,3 +129,11 @@ benchmark speff-bench
     BenchCountdown
     BenchLocal
     BenchPyth
+
+executable Main
+    import: lang
+    hs-source-dirs: app
+    main-is: Main.hs
+    build-depends:
+          base
+        , speff
