@@ -91,6 +91,7 @@ library
     Sp.Reader
     Sp.State
     Sp.Writer
+    Sp.Test
 
   other-modules:
     Sp.Internal.Handle

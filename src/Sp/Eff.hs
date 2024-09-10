@@ -101,12 +101,8 @@ module Sp.Eff (
     inject,
     rearrange,
     rearrangeN,
-    spTest,
 ) where
 
 import Sp.Internal.Env (KnownList, KnownSubset, Subset, Suffix, (:>), type (++))
 import Sp.Internal.Handle
 import Sp.Internal.Monad
-
-spTest :: IO ()
-spTest = print "test"

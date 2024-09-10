@@ -1,6 +1,6 @@
 module Main where
 
-import Sp.Eff (spTest)
+import Sp.Test (spTest)
 
 main :: IO ()
 main = spTest
