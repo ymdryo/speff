@@ -12,15 +12,6 @@ module Sp.Internal.Ctl.Monadic
   ( Marker
   , Ctl
   , freshMarker
-  , prompt
-  , control
-  , abort
-  , promptState
-  , runCtl
-  , dynamicWind
-  , mask
-  , uninterruptibleMask
-  , interruptible
   ) where
 
 import           Control.Exception      (MaskingState (MaskedInterruptible, MaskedUninterruptible, Unmasked),
@@ -45,65 +36,71 @@ uniqueSource = unsafePerformIO (newPrimVar 0)
 {-# NOINLINE uniqueSource #-}
 
 -- | Create a fresh 'Marker'.
-freshMarker :: ∀ a. Ctl (Marker a)
-freshMarker = liftIO $ Marker <$> fetchAddInt uniqueSource 1
+freshMarker :: ∀ h a e. (Marker h a e -> Ctl e a) -> Ctl e a
+freshMarker f =
+    let mark = unsafePerformIO $ fetchAddInt uniqueSource 1
+    in f $ Marker mark
+{-# NOINLINE freshMarker #-}
 
 -- | A @'Marker' a@ marks a prompt frame over a computation returning @a@.
-type role Marker representational
-newtype Marker (a :: Type) = Marker Int
+type role Marker nominal nominal representational
+newtype Marker (h :: Type -> Type -> Type) (e :: Type)  (a :: Type) = Marker Int
 
 -- | Check the equality of two markers, and if so provide a proof that the type parameters are equal. This does not
 -- warrant a @TestEquality@ instance because it requires decidable equality over the type parameters.
-eqMarker :: Marker a -> Marker b -> Maybe (a :~: b)
+eqMarker :: Marker h e a -> Marker h' e' b -> Maybe ((h e a, a, e) :~: (h' e' b, b, e'))
 eqMarker (Marker l) (Marker r) =
   if l == r then Just (unsafeCoerce Refl) else Nothing
 
--- | Intermediate result of a `Ctl` computation.
-type role Result representational
-data Result (a :: Type)
+-- | The delimited control monad, with efficient support of tail-resumptive computations.
+type role Ctl nominal representational
+data Ctl e (a :: Type)
   = Pure a
-  -- ^ The computation returned normally.
-  | ∀ (r :: Type). Abort !(Marker r) (Ctl r)
-  -- ^ The computation replaced itself with another computation.
-  | ∀ (r :: Type) (b :: Type). Control !(Marker r) ((Ctl b -> Ctl r) -> Ctl r) (Ctl b -> Ctl a)
-  -- ^ The computation captured a resumption and gained control over it. Specifically, this uses @shift0@ semantics.
+  | ∀ (r :: Type) (b :: Type) h e'.
+        Control !(Marker h e' r) ((b -> Eff e' r) -> Eff e' r) (b -> Eff e a)
+
+newtype Eff e a = Eff {unEff :: ctx -> Ctl e a}
 
 -- | Extend the captured continuation with a function, if it exists.
-extend :: (Ctl a -> Ctl a) -> Result a -> Result a
+extend :: (Eff ctx a -> Eff ctx a) -> Ctl ctx a -> Ctl ctx a
 extend f = \case
   Pure a                -> Pure a
-  Abort mark r          -> Abort mark r
   Control mark ctl cont -> Control mark ctl (f . cont)
 
--- | The delimited control monad, with efficient support of tail-resumptive computations.
-type role Ctl representational
-newtype Ctl (a :: Type) = Ctl { unCtl :: IO (Result a) }
-
-instance Functor Ctl where
+instance Functor (Eff ctx) where
   fmap = liftM
 
-instance Applicative Ctl where
-  pure = Ctl . pure . Pure
+instance Applicative (Eff ctx) where
+  pure x = Eff \_ -> Pure x
   (<*>) = ap
 
-instance Monad Ctl where
-  (Ctl x) >>= f = Ctl $ x >>= \case
-    Pure a                -> unCtl (f a)
-    Abort mark r          -> pure $ Abort mark r
-    Control mark ctl cont -> pure $ Control mark ctl (f `compose` cont)
+instance Monad (Eff ctx) where
+  Eff eff >>= f =
+        Eff \ctx -> case eff ctx of
+            Pure x -> unEff (f x) ctx
+            Control mark ctl cont -> Control mark ctl (f `compose` cont)
+  {-# INLINE (>>=) #-}
 
 -- | This loopbreaker is crucial to the performance of the monad.
-compose :: (b -> Ctl c) -> (a -> Ctl b) -> a -> Ctl c
+compose :: (b -> Eff ctx c) -> (a -> Eff ctx b) -> a -> Eff ctx c
 compose = (<=<)
 {-# NOINLINE compose #-}
 
--- | Lift an 'IO' function to a 'Ctl' function. The function must not alter the result.
-liftMap, liftMap' :: (IO (Result a) -> IO (Result a)) -> Ctl a -> Ctl a
-liftMap f (Ctl m) = Ctl $ extend (liftMap' f) <$> f m
-{-# INLINE liftMap #-}
-liftMap' = liftMap
-{-# NOINLINE liftMap' #-}
+-- use a prompt with a unique marker (and handle yields to it)
+{-# INLINE prompt #-}
+prompt :: Marker h e ans -> h e ans -> Eff (h :* e) ans -> Eff e ans
+prompt m h (Eff eff) = Eff $ \ctx ->
+    case (eff (CCons m h ctx)) of -- add handler to the context
+        Pure x -> Pure x
+        Control n op cont ->
+            let cont' x = prompt m h (cont x) -- extend the continuation with our own prompt
+             in case mmatch m n of
+                    Nothing -> Control n op cont' -- keep yielding (but with the extended continuation)
+                    Just Refl -> unEff (op cont') ctx -- found our prompt, invoke `op` (under the context `ctx`).
+                    -- Note: `Refl` proves `a ~ ans` and `e ~ e'` (the existential `ans,e'` in Control)
 
+
+{-
 -- | Install a prompt frame.
 prompt, prompt' :: Marker a -> Ctl a -> Ctl a
 prompt !mark (Ctl m) = Ctl $ m >>= \case
@@ -197,3 +194,4 @@ interruptible io = liftIO getMaskingState >>= \case
   Unmasked              -> io
   MaskedInterruptible   -> unblock io
   MaskedUninterruptible -> io
+-}
