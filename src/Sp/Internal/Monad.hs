@@ -1,246 +1,236 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE CPP                 #-}
--- |
--- Copyright: (c) 2022 Xy Ren
--- License: BSD3
--- Maintainer: xy.r@outlook.com
--- Stability: experimental
--- Portability: non-portable (GHC only)
---
--- The effect monad, along with handling combinators that enable delimited control and higher-order effects.
-module Sp.Internal.Monad
-  ( Eff
-  , Env
-  , HandlerCell
-  , Effect
-  , HandleTag
-  , Handler
-  , unsafeIO
-  , unsafeState
-  , handle
-  , rehandle
-  , alter
-  , send
-  , Localized
-  , Handling
-  , embed
-  , withUnembed
-  , abort
-  , control
-  , runEff
-  , IOE
-  , runIOE
-  , dynamicWind
-  , mask
-  , uninterruptibleMask
-  , interruptible
-  ) where
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE ImportQualifiedPost #-}
 
-#ifdef SPEFF_NATIVE_DELCONT
-#define CTL_MODULE Sp.Internal.Ctl.Native
-#else
-#define CTL_MODULE Sp.Internal.Ctl.Monadic
-#endif
+{- |
+ Copyright: (c) 2022 Xy Ren
+ License: BSD3
+ Maintainer: xy.r@outlook.com
+ Stability: experimental
+ Portability: non-portable (GHC only)
 
-import           Control.Monad          (ap, liftM)
-import           Control.Monad.Catch    (MonadCatch, MonadThrow)
-import qualified Control.Monad.Catch    as Catch
-import           Control.Monad.IO.Class (MonadIO (liftIO))
-import           CTL_MODULE             (Ctl, runCtl)
-import qualified CTL_MODULE             as Ctl
-import           Data.IORef             (IORef, newIORef, readIORef, writeIORef)
-import           Data.Kind              (Type)
-import qualified Sp.Internal.Env        as Rec
-import           Sp.Internal.Env        (Rec, (:>))
-import           System.IO.Unsafe       (unsafePerformIO)
+ The effect monad, along with handling combinators that enable delimited control and higher-order effects.
+-}
+module Sp.Internal.Monad where
 
-#undef CTL_MODULE
+import Control.Monad (ap, liftM, (<=<))
+import Data.Functor.Identity (Identity, runIdentity)
+import Data.Kind (Type)
+import Data.Primitive.PrimVar (PrimVar, fetchAddInt, newPrimVar)
+import Data.Type.Equality ((:~:), type (:~:) (Refl))
+import GHC.Exts (RealWorld)
+import Sp.Internal.Env (Rec, (:>))
+import Sp.Internal.Env qualified as Rec
+import System.IO.Unsafe (unsafePerformIO)
+import Unsafe.Coerce (unsafeCoerce)
+import Data.Function ((&))
+import Data.Functor ((<&>))
+import Control.Monad.IO.Class (MonadIO, liftIO)
+import Debug.Trace (trace)
+import Data.IORef
 
--- | The kind of higher-order effects, parameterized by (1) the monad in which it was performed, and (2) the result
--- type.
-type Effect = (Type -> Type) -> Type -> Type
+{- | The kind of higher-order effects, parameterized by (1) the monad in which it was performed, and (2) the result
+ type.
+-}
+type EffectH = (Type -> Type) -> Type -> Type
+
+-- | A @'Marker' a@ marks a prompt frame over a computation returning @a@.
+type role Marker nominal nominal representational
+
+newtype Marker (e :: EffectH) (es :: [EffectH]) (a :: Type) = Marker Int
+
+-- | The source from which we construct unique 'Marker's.
+uniqueSource :: PrimVar RealWorld Int
+uniqueSource = unsafePerformIO (newPrimVar 0)
+{-# NOINLINE uniqueSource #-}
+
+-- | Create a fresh 'Marker'.
+freshMarker :: forall e es m a. (Marker e es a -> Eff m es a) -> Eff m es a
+freshMarker f =
+    let mark = unsafePerformIO $ fetchAddInt uniqueSource 1
+     in f $ Marker mark
+{-# NOINLINE freshMarker #-}
+
+{-
+-- | The source from which we construct unique 'Marker's.
+uniqueSource :: IORef Integer
+uniqueSource = unsafePerformIO (newIORef 0)
+{-# NOINLINE uniqueSource #-}
+
+-- | Create a fresh 'Marker'.
+freshMarker :: forall e es m a. (Marker e es a -> Eff m es a) -> Eff m es a
+freshMarker f =
+    let m = unsafePerformIO $
+            do
+                i <- readIORef uniqueSource
+                writeIORef uniqueSource (i + 1)
+                return i
+     in seq m (f (Marker m))
+{-# NOINLINE freshMarker #-}
+-}
+
+{- | Check the equality of two markers, and if so provide a proof that the type parameters are equal. This does not
+ warrant a @TestEquality@ instance because it requires decidable equality over the type parameters.
+-}
+eqMarker :: Marker e es a -> Marker e' es' b -> Maybe ((e (Eff m es) a, a) :~: (e' (Eff m es') b, b), es :~: es')
+eqMarker (Marker l) (Marker r) =
+    if l == r then Just (unsafeCoerce Refl, unsafeCoerce Refl) else Nothing
+
+-- | The delimited control monad, with efficient support of tail-resumptive computations.
+data Ctl m es (a :: Type)
+    = Pure a
+    | forall (r :: Type) (b :: Type) e es'.
+        Control !(Marker e es' r) ((b -> Eff m es' r) -> Eff m es' r) (b -> Eff m es a)
+
+{- | The effect monad; it is parameterized by the /effect context/, i.e. a row of effects available. This monad is
+ implemented with evidence passing and a delimited control monad with support of efficient tail-resumptive
+ (non-capturing) computations and @IO@ embedding.
+-}
+newtype Eff m es a = Eff {unEff :: Env m es -> m (Ctl m es a)}
+
+-- | Extend the captured continuation with a function, if it exists.
+extend :: (Eff m es a -> Eff m es a) -> Ctl m es a -> Ctl m es a
+extend f = \case
+    Pure a -> Pure a
+    Control mark ctl cont -> Control mark ctl (f . cont)
+
+instance Monad m => Functor (Eff m es) where
+    fmap = liftM
+
+{-# SPECIALIZE fmap :: (a -> b) -> Eff Identity es a -> Eff Identity es b #-}
+{-# SPECIALIZE fmap :: (a -> b) -> Eff IO es a -> Eff IO es b #-}
+
+instance Monad m => Applicative (Eff m es) where
+    pure x = Eff \_ -> pure $ Pure x
+    (<*>) = ap
+
+{-# SPECIALIZE pure :: a -> Eff Identity es a #-}
+{-# SPECIALIZE pure :: a -> Eff IO es a #-}
+
+instance Monad m => Monad (Eff m es) where
+    Eff eff >>= f =
+        Eff \evv -> do
+            eff evv >>= \case
+                Pure x -> unEff (f x) $! evv
+                Control mark ctl cont -> pure $ Control mark ctl (f `compose` cont)
+    {-# INLINE (>>=) #-}
+
+{-# SPECIALIZE (>>=) :: Eff Identity es a -> (a -> Eff Identity es b) -> Eff Identity es b #-}
+{-# SPECIALIZE (>>=) :: Eff IO es a -> (a -> Eff IO es b) -> Eff IO es b #-}
+
+-- | This loopbreaker is crucial to the performance of the monad.
+compose :: Monad m => (b -> Eff m es c) -> (a -> Eff m es b) -> a -> Eff m es c
+compose = (<=<)
+{-# NOINLINE compose #-}
 
 -- | The concrete representation of an effect context: a record of internal handler representations.
-type Env = Rec HandlerCell
+type Env m = Rec (Evidence m) :: [EffectH] -> Type
 
-newtype HandlerCell (e :: Effect) = HandlerCell { getHandlerCell :: IORef (InternalHandler e) }
+data Evidence m (e :: EffectH)
+    = forall es ans. Evidence !(Marker e es ans) !(Env m es) (Handler m e es ans)
 
--- | The effect monad; it is parameterized by the /effect context/, i.e. a row of effects available. This monad is
--- implemented with evidence passing and a delimited control monad with support of efficient tail-resumptive
--- (non-capturing) computations and @IO@ embedding.
-type role Eff nominal representational
-newtype Eff (es :: [Effect]) (a :: Type) = Eff { unEff :: Env es -> Ctl a }
+type Handler m e es ans = forall e' esSend x. (e' :> esSend) => HandleTag m e' es ans -> (forall es'. e (Eff m es') x) -> Eff m esSend x
+data HandleTag m e es ans = HandleTag !(Marker e es ans) (Env m es)
 
--- | The internal representation of a handler of effect @e@. This representation is only valid within the original
--- context in which the effect was introduced.
-type role InternalHandler nominal
-newtype InternalHandler e = InternalHandler
-  { runHandler :: ∀ es a. e :> es => e (Eff es) a -> Eff es a }
+-- use a prompt with a unique marker (and handle yields to it)
+prompt :: Monad m => (Env m es' -> Env m es) -> Marker e es' ans ->  Eff m es ans -> Eff m es' ans
+prompt f mark (Eff eff) = Eff \evv ->
+    eff (f evv) >>= \case
+        Pure x -> pure $ Pure x -- add handler to the context
+        Control mark' ctl k ->
+            let k' = prompt f mark . k -- extend the continuation with our own prompt
+             in case eqMarker mark mark' of
+                    Nothing -> pure $ Control mark' ctl k' -- keep yielding (but with the extended continuation)
+                    Just (Refl, Refl) -> unEff (ctl k') $! evv -- found our prompt, invoke `op` (under the context `evv`).
+                    -- Note: `Refl` proves `a ~ ans` and `es ~ es'` (the existential `ans,es'` in Control)
+{-# INLINE prompt #-}
 
-instance Functor (Eff es) where
-  fmap = liftM
-  {-# INLINE fmap #-}
-
-instance Applicative (Eff es) where
-  pure x = Eff \_ -> pure x
-  {-# INLINE pure #-}
-  (<*>) = ap
-  {-# INLINE (<*>) #-}
-
-instance Monad (Eff es) where
-  Eff m >>= f = Eff \es -> m es >>= \x -> unEff (f x) es
-  {-# INLINE (>>=) #-}
-
--- | The tag associated to a handler that was /introduced/ in context @es@ over an computation with
--- /eventual result type/ @r@. Value of this type enables delimited control and scoped effects.
-data HandleTag (tag :: Type) (es :: [Effect]) (r :: Type) = HandleTag (Env es) !(Ctl.Marker r)
-
--- | A handler of effect @e@ introduced in context @es@ over a computation returning @r@.
-type Handler e es r = ∀ tag esSend a. e :> esSend => HandleTag tag es r -> e (Eff esSend) a -> Eff (Handling tag : esSend) a
-
--- | This "unsafe" @IO@ function is perfectly safe in the sense that it won't panic or otherwise cause undefined
--- behaviors; it is only unsafe when it is used to embed arbitrary @IO@ actions in any effect environment,
--- therefore breaking effect abstraction.
-unsafeIO :: IO a -> Eff es a
-unsafeIO m = Eff (const $ liftIO m)
-{-# INLINE unsafeIO #-}
-
--- | Introduce a mutable state that is well-behaved with respect to reentry. That is, no branch will observe mutations
--- by any other simultaneous branch. This stops behaving as expected if you pass the 'IORef' out of scope.
-unsafeState :: s -> (IORef s -> Eff es a) -> Eff es a
-unsafeState x0 f = Eff \es -> do
-  ref <- liftIO $ newIORef x0
-  Ctl.promptState ref $ unEff (f ref) es
-{-# INLINE unsafeState #-}
-
--- | Convert an effect handler into an internal representation with respect to a certain effect context and prompt
--- frame.
-toInternalHandler :: ∀ e es r. Ctl.Marker r -> Env es -> Handler e es r -> InternalHandler e
-toInternalHandler mark es hdl = InternalHandler \e -> alter Rec.pad $ hdl (HandleTag @() es mark) e
-
--- | Do a trivial transformation over the effect context.
-alter :: (Env es' -> Env es) -> Eff es a -> Eff es' a
-alter f = \(Eff m) -> Eff \es -> m $! f es
-{-# INLINE alter #-}
-
--- | General effect handling. Introduce a prompt frame, convert the supplied handler to an internal one wrt that
--- frame, and then supply the internal handler to the given function to let it add that to the effect context.
-handle :: (HandlerCell e -> Env es' -> Env es) -> Handler e es' a -> Eff es a -> Eff es' a
-handle f = \hdl (Eff m) -> Eff \es -> do
-  mark <- Ctl.freshMarker
-  cell <- liftIO $ newIORef $ toInternalHandler mark es hdl
-  Ctl.prompt mark $ m $! f (HandlerCell cell) es
+handle :: Monad m => (Evidence m e -> Env m es' -> Env m es) -> Handler m e es' ans -> Eff m es ans -> Eff m es' ans
+handle f h action =
+    withEvv \evv ->
+        freshMarker \mark ->
+            prompt (f $ Evidence mark evv h) mark action
 {-# INLINE handle #-}
 
-rehandle :: e :> es => (Env es' -> Env es) -> Handler e es' a -> Eff es a -> Eff es' a
-rehandle f = \hdl (Eff m) -> Eff \es -> do
-  mark <- Ctl.freshMarker
-  let es' = f es
-  let cell = getHandlerCell $ Rec.index es'
-  oldHdl <- liftIO $ readIORef cell
-  Ctl.dynamicWind
-    (liftIO $ writeIORef cell $ toInternalHandler mark es hdl)
-    (liftIO $ writeIORef cell oldHdl)
-    (Ctl.prompt mark $ m es')
+rehandle :: (e :> es, Monad m) => (Env m es' -> Env m es) -> Handler m e es' ans -> Eff m es ans -> Eff m es' ans
+rehandle f = handle \_ -> f
 {-# INLINE rehandle #-}
 
--- | Perform an effect operation.
-send :: e :> es => e (Eff es) a -> Eff es a
-send e = Eff \es -> do
-  ih <- liftIO $ readIORef $ getHandlerCell $ Rec.index es
-  unEff (runHandler ih e) es
+-- | Do a trivial transformation over the effect context.
+alter :: Monad m => (Env m es' -> Env m es) -> Eff m es a -> Eff m es' a
+alter f = \(Eff m) -> Eff \evv -> alterCtl f <$> (m $! f evv)
+{-# INLINE alter #-}
+
+-- | Do a trivial transformation over the effect context.
+alterCtl :: Monad m => (Env m es' -> Env m es) -> Ctl m es a -> Ctl m es' a
+alterCtl f = \case
+    Pure x -> Pure x
+    Control mark ctl k -> Control mark ctl \b -> alter f (k b)
+{-# INLINE alterCtl #-}
+
+under :: (e :> es, Monad m) => Marker e es' ans -> Env m es' -> Eff m es' b -> Eff m es b
+under !mark evv (Eff m) = Eff \_ ->
+    m evv <&> \case
+        Pure x -> Pure x
+        Control mark' ctl k -> Control mark' ctl $ resumeUnder mark k
+
+resumeUnder :: forall e es es' ans m a b. (e :> es, Monad m) => Marker e es' ans -> (b -> Eff m es' a) -> (b -> Eff m es a)
+resumeUnder !mark k x =
+    withSubContext @e \(Evidence mark' evv' _) ->
+        case eqMarker mark mark' of
+            Just (Refl,Refl) -> under mark evv' (k x)
+            Nothing -> error "unreachable"
+
+send :: forall e es m a. (e :> es, Monad m) => (forall es'. e (Eff m es') a) -> Eff m es a
+send e = withSubContext \(Evidence marker evv' h) -> h (HandleTag marker evv') e
 {-# INLINE send #-}
 
--- | A "localized computaton"; this should be parameterized with an existential variable so the computation with this
--- effect cannot escape a certain scope.
-data Localized (tag :: Type) :: Effect
-data Handling (tag :: Type) :: Effect
-
--- | Perform an operation from the handle-site.
-embed :: Handling tag :> esSend => HandleTag tag es r -> Eff es a -> Eff esSend a
-embed (HandleTag es _) (Eff m) = Eff \_ -> m es
+embed :: (Monad m, e' :> esSend) => HandleTag m e' es ans -> Eff m es a -> Eff m esSend a
+embed (HandleTag !mark evv) =  under mark evv
 {-# INLINE embed #-}
 
--- | Perform an operation from the handle-site, while being able to convert an operation from the perform-site to the
--- handle-site.
-withUnembed
-  :: Handling tag :> esSend
-  => HandleTag tag es r
-  -> (∀ tag'. (∀ x. Eff esSend x -> Eff (Localized tag' : es) x) -> Eff (Localized tag' : es) a)
-  -> Eff esSend a
-withUnembed (HandleTag es _) f =
-  Eff \esSend -> unEff (f \(Eff m) -> Eff \_ -> m esSend) $! Rec.pad es
-{-# INLINE withUnembed #-}
+{-
+control :: Monad m => Marker e es ans -> ((b -> Eff m es ans) -> Eff m es ans) -> Eff m es' b
+control !mark ctl = trace "control" $ Eff \_ -> pure $ Control mark ctl pure
+{-# INLINE control #-}
+-}
 
--- | Abort with a result value.
-abort :: Handling tag :> esSend => HandleTag tag es r -> Eff es r -> Eff esSend a
-abort (HandleTag es mark) (Eff m) = Eff \_ -> Ctl.abort mark $ m es
-{-# INLINE abort #-}
-
--- | Capture and gain control of the resumption. The resumption cannot escape the scope of the controlling function.
-control
-  :: Handling tag :> esSend
-  => HandleTag tag es r
-  -> (∀ tag'. (Eff esSend a -> Eff (Localized tag' : es) r) -> Eff (Localized tag' : es) r)
-  -> Eff esSend a
-control (HandleTag es mark) f =
-  Eff \esSend -> Ctl.control mark \cont -> unEff (f \(Eff x) -> Eff \_ -> cont $ x esSend) $! Rec.pad es
+control :: Monad m => ((a -> Eff m es ans) -> Eff m  es ans) -> forall esSend e'. HandleTag m e' es ans -> Eff m esSend a
+control f (HandleTag !mark _) = Eff \_ -> pure $ Control mark f pure
 {-# INLINE control #-}
 
--- | Unwrap the 'Eff' monad.
-runEff :: Eff '[] a -> a
-runEff (Eff m) = unsafePerformIO (runCtl $ m Rec.empty)
+{-
+abort :: Monad m => Marker e es ans -> Eff m es ans -> Eff m es' b
+abort !mark m = control mark \_ -> m
+{-# INLINE abort #-}
+-}
+
+-- withUnembed :: e :> esSend => HandleTag m e es ans -> (Eff )
+
+withSubContext :: (e :> es, Monad m) => (Evidence m e -> Eff m es a) -> Eff m es a
+withSubContext f =  -- Eff \evv -> unEff (Rec.index evv & \ev -> f ev) $! evv -- wrong?
+    do
+        evv <- Eff $ pure . Pure
+        f $ Rec.index evv
+{-# INLINE withSubContext #-}
+
+withEvidence :: (e :> es, Monad m) => (Evidence m e -> Eff m es a) -> Eff m es a
+withEvidence f =  Eff \evv -> unEff (Rec.index evv & \ev -> f ev) $! evv
+{-# INLINE withEvidence #-}
+
+withEvv :: (Env m es -> Eff m es a) -> Eff m es a
+withEvv f = Eff \evv -> unEff (f evv) $! evv
+{-# INLINE withEvv #-}
+
+instance MonadIO m => MonadIO (Eff m es) where
+    liftIO m = Eff \_ -> Pure <$> liftIO m
+
+runEff :: Functor m => Eff m '[] a -> m a
+runEff (Eff m) = (m $! Rec.empty) <&> \case
+    Pure x -> x
+    Control _ _ _ -> error "unreachable"
 {-# INLINE runEff #-}
 
--- | Ability to embed 'IO' side effects.
-data IOE :: Effect
-
-instance IOE :> es => MonadIO (Eff es) where
-  liftIO = unsafeIO
-  {-# INLINE liftIO #-}
-
-instance MonadThrow (Eff es) where
-  throwM x = Eff \_ -> Catch.throwM x
-  {-# INLINE throwM #-}
-
-instance IOE :> es => MonadCatch (Eff es) where
-  catch (Eff m) h = Eff \es -> Catch.catch (m es) \ex -> unEff (h ex) es
-  {-# INLINE catch #-}
-
--- | Unwrap an 'Eff' monad with 'IO' computations.
-runIOE :: Eff '[IOE] a -> IO a
-runIOE m = runCtl $ unEff m (Rec.pad Rec.empty)
-{-# INLINE runIOE #-}
-
--- | Attach a pre- and a post-action to a computation. The pre-action runs immediately before the computation, and the
--- post-action runs immediately after the computation exits, whether normally, via an error, or via an exception.
--- Additionally, the post-action runs immediately after any suspension of the enclosed computation and the pre-action
--- runs immediately before any resumption of such suspension.
---
--- Therefore, this function acts like 'Control.Exception.bracket_' when there is no resumption of suspensions involved,
--- except providing no protection against async exceptions. If you want such protection, please manually supply masked
--- actions.
---
--- In all cases, it is guaranteed that pre- and post-actions are always executed in pairs; that is to say, it is
--- impossible to have two calls to the pre-action without a call to the post-action interleaving them, or vice versa.
--- This also means that the pre- and post-action are always executed the same number of times, discounting
--- interruptions caused by async exceptions.
-dynamicWind :: Eff es () -> Eff es () -> Eff es a -> Eff es a
-dynamicWind (Eff before) (Eff after) (Eff action) =
-  Eff \es -> Ctl.dynamicWind (before es) (after es) (action es)
-{-# INLINE dynamicWind #-}
-
--- | Lifted version of 'Control.Exception.mask'.
-mask :: IOE :> es => ((∀ x. Eff es x -> Eff es x) -> Eff es a) -> Eff es a
-mask f = Eff \es -> Ctl.mask \unmask -> unEff (f \(Eff m) -> Eff \es' -> unmask (m es')) es
-{-# INLINE mask #-}
-
--- | Lifted version of 'Control.Exception.uninterruptibleMask'.
-uninterruptibleMask :: IOE :> es => ((∀ x. Eff es x -> Eff es x) -> Eff es a) -> Eff es a
-uninterruptibleMask f = Eff \es -> Ctl.uninterruptibleMask \unmask -> unEff (f \(Eff m) -> Eff \es' -> unmask (m es')) es
-{-# INLINE uninterruptibleMask #-}
-
--- | Lifted version of 'Control.Exception.interruptible'.
-interruptible :: IOE :> es => Eff es a -> Eff es a
-interruptible (Eff m) = Eff \es -> Ctl.interruptible (m es)
-{-# INLINE interruptible #-}
+runPure :: Eff Identity '[] a -> a
+runPure = runIdentity . runEff
+{-# INLINE runPure #-}

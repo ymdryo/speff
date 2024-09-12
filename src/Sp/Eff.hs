@@ -10,17 +10,16 @@
 -}
 module Sp.Eff (
     -- * Basic types and operations
-    Effect,
+    EffectH,
     Eff,
-    IOE,
     (:>),
 
     -- ** Performing effects
     send,
 
     -- ** Unwrapping
-    runIOE,
     runEff,
+    runPure,
 
     -- * Effect handling
     HandleTag,
@@ -59,10 +58,7 @@ module Sp.Eff (
 
     -- ** Combinators to use in handlers
     embed,
-    withUnembed,
-    abort,
     control,
-    Localized,
 
     -- * Trivial transformations
     KnownList,

@@ -74,11 +74,11 @@ import           Sp.Internal.Monad
 -- | The family of /interpreting/ functions. Eliminate an effect from the top of the stack via a handler, and
 -- optionally add some other effects (@es'@) that could be used in the handler. Adding these effects instead of
 -- requiring them on the client side achieves effect encapsulation.
-type Interpret es' = ∀ e es a. Handler e (es' ++ es) a -> Eff (e : es) a -> Eff (es' ++ es) a
+type Interpret es' = ∀ m e es a. Monad m => Handler m e (es' ++ es) a -> Eff m (e : es) a -> Eff m (es' ++ es) a
 
 -- | Interpret and add extra effects based on type inference. If this does not work consider using the more concrete
 -- functions below.
-interpret :: Suffix es es' => Handler e es' a -> Eff (e : es) a -> Eff es' a
+interpret :: (Suffix es es', Monad m) => Handler m e es' a -> Eff m (e : es) a -> Eff m es' a
 interpret = handle \ih es -> Rec.cons ih $ Rec.suffix es
 {-# INLINE interpret #-}
 
@@ -113,11 +113,11 @@ interpretN = handle \ih es -> Rec.cons ih $ Rec.drop @es' es
 
 -- | The family of /interposing/ functions. Modify the implementation of an effect in the stack via a new handler, and
 -- optionally add some other effects (@es'@) that could be used in said handler.
-type Interpose es' = ∀ e es a. e :> es => Handler e (es' ++ es) a -> Eff es a -> Eff (es' ++ es) a
+type Interpose es' = ∀ m e es a. (e :> es, Monad m) => Handler m e (es' ++ es) a -> Eff m es a -> Eff m (es' ++ es) a
 
 -- | Interpose and add extra effects based on type inference. If this does not work consider using the more concrete
 -- functions below.
-interpose :: (e :> es, Suffix es es') => Handler e es' a -> Eff es a -> Eff es' a
+interpose :: (e :> es, Suffix es es', Monad m) => Handler m e es' a -> Eff m es a -> Eff m es' a
 interpose = handle \ih es -> Rec.update ih $ Rec.suffix es
 {-# INLINE interpose #-}
 
@@ -152,11 +152,11 @@ interposeN = handle \ih es -> Rec.update ih $ Rec.drop @es' es
 
 -- | The family of /interposing/ functions. Modify the implementation of an effect in the stack via a new handler, and
 -- optionally add some other effects (@es'@) that could be used in said handler.
-type Replace es' = ∀ e es a. e :> es => Handler e (es' ++ es) a -> Eff es a -> Eff (es' ++ es) a
+type Replace es' = ∀ m e es a. (e :> es, Monad m) => Handler m e (es' ++ es) a -> Eff m es a -> Eff m (es' ++ es) a
 
 -- | Replace and add extra effects based on type inference. If this does not work consider using the more concrete
 -- functions below.
-replace :: (e :> es, Suffix es es') => Handler e es' a -> Eff es a -> Eff es' a
+replace :: (e :> es, Suffix es es', Monad m) => Handler m e es' a -> Eff m es a -> Eff m es' a
 replace = rehandle \es -> Rec.suffix es
 {-# INLINE replace #-}
 
@@ -191,11 +191,11 @@ replaceN = rehandle \es -> Rec.drop @es' es
 
 -- | The family of /lifting/ functions. They trivially lift a computation over some effects into a larger effect
 -- context. It can be also seen as masking a set of effects from the inner computation.
-type Lift es' = ∀ es a. Eff es a -> Eff (es' ++ es) a
+type Lift es' = ∀ m es a. Monad m => Eff m es a -> Eff m (es' ++ es) a
 
 -- | Lift over some effects based on type inference. If this does not work consider using the more concrete functions
 -- below.
-lift :: Suffix es es' => Eff es a -> Eff es' a
+lift :: (Suffix es es', Monad m) => Eff m es a -> Eff m es' a
 lift = alter Rec.suffix
 {-# INLINE lift #-}
 
@@ -224,11 +224,11 @@ liftN = alter (Rec.drop @es')
 --------------------------------------------------------------------------------
 
 -- | The family of /lifting-under-1/ functions. They lift over several effects /under/ one effect.
-type LiftNUnder es' = ∀ e es a. Eff (e : es) a -> Eff (e : es' ++ es) a
+type LiftNUnder es' = ∀ m e es a. Monad m => Eff m (e : es) a -> Eff m (e : es' ++ es) a
 
 -- | Lift over several effect under 1 effect, based on type inference. If this does not work consider using the more
 -- concrete functions below.
-liftUnder1 :: Suffix es es' => Eff (e : es) a -> Eff (e : es') a
+liftUnder1 :: (Suffix es es', Monad m) => Eff m (e : es) a -> Eff m (e : es') a
 liftUnder1 = alter \es -> Rec.cons (Rec.head es) $ Rec.suffix es
 {-# INLINE liftUnder1 #-}
 
@@ -254,7 +254,7 @@ liftNUnder1 = alter \es -> Rec.cons (Rec.head es) $ Rec.drop @(_ : es') es
 
 -- | The family of /lifting-1-under/ functions. They lift over an effect /under several effects/. This family of
 -- functions don't have inferred variants because they're hard to formulate.
-type LiftUnderN es' = ∀ e es a. Eff (es' ++ es) a -> Eff (es' ++ e : es) a
+type LiftUnderN es' = ∀ m e es a. Monad m => Eff m (es' ++ es) a -> Eff m (es' ++ e : es) a
 
 -- | Lift over 1 effect under 2 effects.
 lift1Under2 :: ∀ e' e''. LiftUnderN '[e', e'']
@@ -267,13 +267,13 @@ lift1Under3 = lift1UnderN @'[e', e'', e''']
 {-# INLINE lift1Under3 #-}
 
 -- | Lift over 1 effect under a list effects explicitly supplied via @TypeApplications@.
-lift1UnderN :: ∀ es' e es a. KnownList es' => Eff (es' ++ es) a -> Eff (es' ++ e : es) a
+lift1UnderN :: ∀ es' e es m a. (KnownList es', Monad m) => Eff m (es' ++ es) a -> Eff m (es' ++ e : es) a
 lift1UnderN = alter \es -> Rec.concat (Rec.take @es' @(e : es) es) $ Rec.tail $ Rec.drop @es' @(e : es) es
 {-# INLINE lift1UnderN #-}
 
 -- | The most general /lifting-under/ function. Lifts over a list of effects under another list of effects. Both
 -- lists are to supplied explicitly via @TypeApplications@.
-liftNUnderN :: ∀ es'' es' es a. (KnownList es', KnownList es'') => Eff (es' ++ es) a -> Eff (es' ++ es'' ++ es) a
+liftNUnderN :: ∀ es'' es' es m a. (KnownList es', KnownList es'', Monad m) => Eff m (es' ++ es) a -> Eff m (es' ++ es'' ++ es) a
 liftNUnderN = alter \es ->
   Rec.concat (Rec.take @es' @(es'' ++ es) es) $ Rec.drop @es'' @es $ Rec.drop @es' @(es'' ++ es) es
 {-# INLINE liftNUnderN #-}
@@ -284,7 +284,7 @@ liftNUnderN = alter \es ->
 
 -- | The family of /subsumption/ functions. They trivially eliminate duplicate effects from the top of the stack. This
 -- functions don't have inferred variants because they're hard to formulate.
-type Subsume es' = ∀ es a. KnownSubset es' es => Eff (es' ++ es) a -> Eff es a
+type Subsume es' = ∀ m es a. (KnownSubset es' es, Monad m) => Eff m (es' ++ es) a -> Eff m es a
 
 -- | Subsume 1 duplicate effect.
 subsume1 :: ∀ e'. Subsume '[e']
@@ -311,17 +311,17 @@ subsumeN = alter \es -> Rec.concat (Rec.pick @es' es) es
 --------------------------------------------------------------------------------
 
 -- | Inject a small effect context with all elements known into a larger effect context.
-inject :: KnownSubset es' es => Eff es' a -> Eff es a
+inject :: (KnownSubset es' es, Monad m) => Eff m es' a -> Eff m es a
 inject = alter Rec.pick
 {-# INLINE inject #-}
 
 -- | Arbitrarily rearrange the known prefix of the effect context of a computation, as long as the polymorphic tail
 -- is unchanged. This function is based on type inference, use 'inject' or 'rearrangeN' when it doesn't work properly.
-rearrange :: Subset es es' => Eff es a -> Eff es' a
+rearrange :: (Subset es es', Monad m) => Eff m es a -> Eff m es' a
 rearrange = alter Rec.extract
 {-# INLINE rearrange #-}
 
 -- | Like 'rearrange' but with the prefixes explicitly supplied via @TypeApplications@.
-rearrangeN :: ∀ es' es'' es a. (KnownList es'', KnownSubset es' (es'' ++ es)) => Eff (es' ++ es) a -> Eff (es'' ++ es) a
+rearrangeN :: ∀ es' es'' es m a. (KnownList es'', KnownSubset es' (es'' ++ es), Monad m) => Eff m (es' ++ es) a -> Eff m (es'' ++ es) a
 rearrangeN = alter \es -> Rec.concat (Rec.pick @es' es) $ Rec.drop @es'' @es es
 {-# INLINE rearrangeN #-}
