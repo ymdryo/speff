@@ -7,6 +7,8 @@ module Sp.Reader
 
 import           Data.Kind (Type)
 import           Sp.Eff
+import Debug.Trace (trace)
+import Control.Monad.IO.Class (MonadIO)
 
 -- | Provides an environment value of type @r@, and you can override it in a local scope.
 data Reader (r :: Type) :: EffectH where
@@ -14,7 +16,7 @@ data Reader (r :: Type) :: EffectH where
   Local :: (r -> r) -> m a -> Reader r m a
 
 -- | Obtain the environment value.
-ask :: (Reader r :> es, Monad m) => Eff m es r
+ask :: (Reader r :> es, MonadIO m) => Eff m es r
 ask = send Ask
 
 {-
@@ -24,8 +26,8 @@ local f m = send (Local f m)
 -}
 
 handleReader :: Monad m => r -> Handler m (Reader r) es a
-handleReader !r _ = \case
-  Ask       -> pure r
+handleReader !r tag = \case
+  Ask       -> embed tag $ pure r
   -- Local f m -> replace (handleReader $ f r) m
 
 -- | Run the 'Reader' effect with an environment value.

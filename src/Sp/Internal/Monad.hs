@@ -38,7 +38,9 @@ type EffectH = (Type -> Type) -> Type -> Type
 type role Marker nominal nominal representational
 
 newtype Marker (e :: EffectH) (es :: [EffectH]) (a :: Type) = Marker Int
+    deriving Show
 
+{-
 -- | The source from which we construct unique 'Marker's.
 uniqueSource :: PrimVar RealWorld Int
 uniqueSource = unsafePerformIO (newPrimVar 0)
@@ -50,10 +52,10 @@ freshMarker f =
     let mark = unsafePerformIO $ fetchAddInt uniqueSource 1
      in f $ Marker mark
 {-# NOINLINE freshMarker #-}
+-}
 
-{-
 -- | The source from which we construct unique 'Marker's.
-uniqueSource :: IORef Integer
+uniqueSource :: IORef Int
 uniqueSource = unsafePerformIO (newIORef 0)
 {-# NOINLINE uniqueSource #-}
 
@@ -67,7 +69,6 @@ freshMarker f =
                 return i
      in seq m (f (Marker m))
 {-# NOINLINE freshMarker #-}
--}
 
 {- | Check the equality of two markers, and if so provide a proof that the type parameters are equal. This does not
  warrant a @TestEquality@ instance because it requires decidable equality over the type parameters.
@@ -110,9 +111,9 @@ instance Monad m => Applicative (Eff m es) where
 instance Monad m => Monad (Eff m es) where
     Eff eff >>= f =
         Eff \evv -> do
-            eff evv >>= \case
+            (eff $! evv) >>= \case
                 Pure x -> unEff (f x) $! evv
-                Control mark ctl cont -> pure $ Control mark ctl (f `compose` cont)
+                Control mark ctl cont -> trace ("bind control " ++ show mark) $ pure $ Control mark ctl (f `compose` cont)
     {-# INLINE (>>=) #-}
 
 {-# SPECIALIZE (>>=) :: Eff Identity es a -> (a -> Eff Identity es b) -> Eff Identity es b #-}
@@ -141,15 +142,19 @@ prompt f mark (Eff eff) = Eff \evv ->
             let k' = prompt f mark . k -- extend the continuation with our own prompt
              in case eqMarker mark mark' of
                     Nothing -> pure $ Control mark' ctl k' -- keep yielding (but with the extended continuation)
-                    Just (Refl, Refl) -> unEff (ctl k') $! evv -- found our prompt, invoke `op` (under the context `evv`).
+                    Just (Refl, Refl) -> trace ("prompt match " ++ show (mark,mark')) $ unEff (ctl k') $! evv -- found our prompt, invoke `op` (under the context `evv`).
                     -- Note: `Refl` proves `a ~ ans` and `es ~ es'` (the existential `ans,es'` in Control)
 {-# INLINE prompt #-}
 
 handle :: Monad m => (Evidence m e -> Env m es' -> Env m es) -> Handler m e es' ans -> Eff m es ans -> Eff m es' ans
 handle f h action =
+    freshMarker \mark -> do
+        prompt (\evv -> f (Evidence mark evv h) evv) mark action
+{- well-typed but wrong semantics:
     withEvv \evv ->
-        freshMarker \mark ->
+        freshMarker \mark -> do
             prompt (f $ Evidence mark evv h) mark action
+-}
 {-# INLINE handle #-}
 
 rehandle :: (e :> es, Monad m) => (Env m es' -> Env m es) -> Handler m e es' ans -> Eff m es ans -> Eff m es' ans
@@ -169,20 +174,20 @@ alterCtl f = \case
 {-# INLINE alterCtl #-}
 
 under :: (e :> es, Monad m) => Marker e es' ans -> Env m es' -> Eff m es' b -> Eff m es b
-under !mark evv (Eff m) = Eff \_ ->
+under !mark evv (Eff m) = trace ("under " ++ show mark) $ Eff \_ ->
     m evv <&> \case
         Pure x -> Pure x
         Control mark' ctl k -> Control mark' ctl $ resumeUnder mark k
 
 resumeUnder :: forall e es es' ans m a b. (e :> es, Monad m) => Marker e es' ans -> (b -> Eff m es' a) -> (b -> Eff m es a)
 resumeUnder !mark k x =
-    withSubContext @e \(Evidence mark' evv' _) ->
+    trace ("resumeUnder " ++ show mark) $ withEvidence @e \(Evidence mark' evv' _) ->
         case eqMarker mark mark' of
             Just (Refl,Refl) -> under mark evv' (k x)
             Nothing -> error "unreachable"
 
-send :: forall e es m a. (e :> es, Monad m) => (forall es'. e (Eff m es') a) -> Eff m es a
-send e = withSubContext \(Evidence marker evv' h) -> h (HandleTag marker evv') e
+send :: forall e es m a. (e :> es, MonadIO m) => (forall es'. e (Eff m es') a) -> Eff m es a
+send e = withEvidence \(Evidence mark evv' h) -> h (HandleTag mark evv') e
 {-# INLINE send #-}
 
 embed :: (Monad m, e' :> esSend) => HandleTag m e' es ans -> Eff m es a -> Eff m esSend a
@@ -196,7 +201,7 @@ control !mark ctl = trace "control" $ Eff \_ -> pure $ Control mark ctl pure
 -}
 
 control :: Monad m => ((a -> Eff m es ans) -> Eff m  es ans) -> forall esSend e'. HandleTag m e' es ans -> Eff m esSend a
-control f (HandleTag !mark _) = Eff \_ -> pure $ Control mark f pure
+control f (HandleTag !mark _) = Eff \_ -> trace ("control " ++ show mark) $ pure $ Control mark f pure
 {-# INLINE control #-}
 
 {-
@@ -206,13 +211,6 @@ abort !mark m = control mark \_ -> m
 -}
 
 -- withUnembed :: e :> esSend => HandleTag m e es ans -> (Eff )
-
-withSubContext :: (e :> es, Monad m) => (Evidence m e -> Eff m es a) -> Eff m es a
-withSubContext f =  -- Eff \evv -> unEff (Rec.index evv & \ev -> f ev) $! evv -- wrong?
-    do
-        evv <- Eff $ pure . Pure
-        f $ Rec.index evv
-{-# INLINE withSubContext #-}
 
 withEvidence :: (e :> es, Monad m) => (Evidence m e -> Eff m es a) -> Eff m es a
 withEvidence f =  Eff \evv -> unEff (Rec.index evv & \ev -> f ev) $! evv

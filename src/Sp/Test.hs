@@ -1,28 +1,28 @@
+{-# LANGUAGE ImportQualifiedPost #-}
+
 module Sp.Test where
 
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Kind (Type)
+import Debug.Trace (trace)
 import Sp.Eff
-import Sp.Internal.Monad (Evidence (Evidence), HandleTag (HandleTag), under, withEvidence, withSubContext)
+import Sp.Internal.Env qualified as Rec
+import Sp.Internal.Monad (Evidence (Evidence), HandleTag (HandleTag), Marker (Marker), under, withEvidence, withEvv)
 import Sp.Reader
 import Sp.State
 
-handleStatePure :: forall s es m a. MonadIO m => Handler m (State s) (Reader s ': es) a
+handleStatePure :: forall s es m a. (Monad m, Show s) => Handler m (State s) (Reader s ': es) a
 handleStatePure tag@(HandleTag mark evv) = \case
-    Get ->
-        {-
-        flip control tag \k -> do
-            r <- ask
-            k r
-        -}
-        -- embed tag $ ask
-        -- under mark evv $ withSubContext \(Evidence m' ctx' h) -> h (HandleTag m' ctx') Ask
-        embed tag ask
+    Get -> do
+        trace ("mark = " ++ show mark) $ pure ()
+        under mark evv do
+            s <- (\(Evidence mark' evv'' h) -> trace ("mark' = " ++ show mark') $ h (HandleTag mark' evv'') Ask) $ Rec.index @(Reader s) evv
+            trace ("s = " ++ show s) $ pure s
     Put s ->
         flip control tag \k -> do
             lift1 $ runReader s $ k ()
 
-runStatePure :: MonadIO m => s -> Eff m (State s : Reader s ': es) a -> Eff m es (a, s)
+runStatePure :: (MonadIO m, Show s) => s -> Eff m (State s : Reader s ': es) a -> Eff m es (a, s)
 runStatePure s0 m =
     runReader s0 do
         interpret0 handleStatePure do
@@ -30,10 +30,10 @@ runStatePure s0 m =
             s <- ask
             pure (r, s)
 
-get :: (State Integer :> es, Monad m) => Eff m es Integer
+get :: (State Integer :> es, MonadIO m) => Eff m es Integer
 get = send Get
 
-put :: (State Integer :> es, Monad m) => Integer -> Eff m es ()
+put :: (State Integer :> es, MonadIO m) => Integer -> Eff m es ()
 put x = send $ Put x
 
 spTest :: IO ()
