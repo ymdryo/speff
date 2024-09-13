@@ -28,15 +28,14 @@ import Data.Function ((&))
 import Data.Functor ((<&>))
 import Control.Monad.IO.Class (MonadIO, liftIO)
 
-{- | The kind of higher-order effects, parameterized by (1) the monad in which it was performed, and (2) the result
- type.
+{- | The kind of first-order effects, parameterized by the result type.
 -}
-type EffectH = (Type -> Type) -> Type -> Type
+type Effect = Type -> Type
 
 -- | A @'Marker' a@ marks a prompt frame over a computation returning @a@.
 type role Marker nominal nominal representational
 
-newtype Marker (e :: EffectH) (es :: [EffectH]) (a :: Type) = Marker Int
+newtype Marker (e :: Effect) (es :: [Effect]) (a :: Type) = Marker Int
 
 -- | The source from which we construct unique 'Marker's.
 uniqueSource :: PrimVar RealWorld Int
@@ -53,7 +52,7 @@ freshMarker f =
 {- | Check the equality of two markers, and if so provide a proof that the type parameters are equal. This does not
  warrant a @TestEquality@ instance because it requires decidable equality over the type parameters.
 -}
-eqMarker :: Marker e es a -> Marker e' es' b -> Maybe ((e (Eff m es) a, a) :~: (e' (Eff m es') b, b), es :~: es')
+eqMarker :: Marker e es a -> Marker e' es' b -> Maybe ((e a, a) :~: (e' b, b), es :~: es')
 eqMarker (Marker l) (Marker r) =
     if l == r then Just (unsafeCoerce Refl, unsafeCoerce Refl) else Nothing
 
@@ -95,12 +94,12 @@ compose = (<=<)
 {-# NOINLINE compose #-}
 
 -- | The concrete representation of an effect context: a record of internal handler representations.
-type Env m = Rec (Evidence m) :: [EffectH] -> Type
+type Env m = Rec (Evidence m) :: [Effect] -> Type
 
-data Evidence m (e :: EffectH)
+data Evidence m (e :: Effect)
     = forall es ans. Evidence !(Marker e es ans) !(Env m es) (Handler m e es ans)
 
-type Handler m e es ans = forall e' esSend x. (e :> esSend, e' :> esSend) => HandleTag m e' es ans -> e (Eff m esSend) x -> Eff m esSend x
+type Handler m e es ans = forall e' esSend x. e' :> esSend => HandleTag m e' es ans -> e x -> Eff m esSend x
 data HandleTag m e es ans = HandleTag !(Marker e es ans) (Env m es)
 
 -- use a prompt with a unique marker (and handle yields to it)
@@ -151,7 +150,7 @@ resumeUnder !mark k x =
             Just (Refl,Refl) -> under mark evv' (k x)
             Nothing -> error "unreachable"
 
-send :: forall e es m a. (e :> es, Monad m) => e (Eff m es) a -> Eff m es a
+send :: forall e es m a. (e :> es, Monad m) => e a -> Eff m es a
 send e = withEvidence \(Evidence marker evv' h) -> h (HandleTag marker evv') e
 {-# INLINE send #-}
 

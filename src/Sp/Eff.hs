@@ -10,7 +10,7 @@
 -}
 module Sp.Eff (
     -- * Basic types and operations
-    EffectH,
+    Effect,
     Eff,
     (:>),
 

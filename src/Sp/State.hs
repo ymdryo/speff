@@ -4,9 +4,9 @@ import Sp.Eff
 import Sp.Reader
 
 -- | Provides a mutable state of type @s@.
-data State s :: EffectH where
-    Get :: State s m s
-    Put :: s -> State s m ()
+data State s :: Effect where
+    Get :: State s s
+    Put :: s -> State s ()
 
 -- | Get the mutable state.
 get :: (State s :> es, Monad m) => Eff m es s

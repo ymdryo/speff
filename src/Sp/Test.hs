@@ -6,8 +6,8 @@ import Sp.Internal.Monad (HandleTag (HandleTag), Marker, abort)
 import Sp.Reader
 import Sp.State
 
-data Yield a b :: EffectH where
-    Yield :: a -> Yield a b m b
+data Yield a b :: Effect where
+    Yield :: a -> Yield a b b
 
 data Status f a b r = Done r | Coroutine a (b -> f (Status f a b r))
 
