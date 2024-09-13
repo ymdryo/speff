@@ -182,3 +182,7 @@ runEff (Eff m) = (m $! Rec.empty) <&> \case
 runPure :: Eff Identity '[] a -> a
 runPure = runIdentity . runEff
 {-# INLINE runPure #-}
+
+runPure' :: Eff IO '[] a -> a
+runPure' = unsafePerformIO . runEff
+{-# INLINE runPure' #-}

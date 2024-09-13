@@ -17,18 +17,4 @@ runCoroutine m = do
 
 spTest :: IO ()
 spTest = runEff do
-    stat <- runCoroutine @Int @Int do
-        r <- send $ Yield @Int @Int 0
-        liftIO $ putStrLn $ "reply: " <> show r
-        _ <- send $ Yield @Int @Int 100
-        pure ()
-
-    case stat of
-        Done n -> liftIO $ print n
-        Coroutine n k -> do
-            liftIO $ putStrLn $ "yielded: " <> show n
-            stat' <- k 20
-            case stat' of
-                Done () -> liftIO $ putStrLn "Done."
-                Coroutine n' _ -> liftIO $ putStrLn $ "Continue... " <> show n'
-            pure ()
+    undefined

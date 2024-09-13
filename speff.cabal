@@ -125,10 +125,7 @@ benchmark speff-bench
     build-depends: effectful-core ^>=2.3
 
   other-modules:
-    BenchCatch
     BenchCountdown
-    BenchLocal
-    BenchPyth
 
 executable Main
     import: lang
