@@ -1,6 +1,7 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ImportQualifiedPost #-}
+{-# LANGUAGE QuantifiedConstraints #-}
 
 {- |
  Copyright: (c) 2022 Xy Ren

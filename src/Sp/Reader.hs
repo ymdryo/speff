@@ -1,3 +1,4 @@
+{-# LANGUAGE QuantifiedConstraints #-}
 module Sp.Reader where
 
 import           Data.Kind (Type)

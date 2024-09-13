@@ -1,4 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE QuantifiedConstraints #-}
 -- |
 -- Copyright: (c) 2022 Xy Ren
 -- License: BSD3
