@@ -84,7 +84,7 @@ library
   exposed-modules:
     Sp.Eff
     -- Sp.Eff.Exception
-    -- Sp.Error
+    Sp.Error
     Sp.Internal.Env
     Sp.Internal.Monad
     -- Sp.NonDet
