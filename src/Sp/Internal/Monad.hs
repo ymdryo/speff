@@ -14,7 +14,6 @@ import           Control.Monad          (ap, liftM)
 import           Control.Monad.Catch    (MonadCatch, MonadThrow)
 import qualified Control.Monad.Catch    as Catch
 import           Control.Monad.IO.Class (MonadIO (liftIO))
-import           Data.IORef             (IORef, newIORef, readIORef)
 import           Data.Kind              (Type)
 import qualified Sp.Internal.Env        as Rec
 import           Sp.Internal.Env        (Rec, (:>))
@@ -150,10 +149,10 @@ instance Monad (Eff es) where
 
 -- | The tag associated to a handler that was /introduced/ in context @es@ over an computation with
 -- /eventual result type/ @r@. Value of this type enables delimited control and scoped effects.
-data HandleTag (tag :: Type) (es :: [Effect]) (r :: Type) = HandleTag (Env es) !(Marker r)
+data HandleTag (es :: [Effect]) (r :: Type) = HandleTag (Env es) !(Marker r)
 
 -- | A handler of effect @e@ introduced in context @es@ over a computation returning @r@.
-type Handler e es r = ∀ tag esSend a. e :> esSend => HandleTag tag es r -> e (Eff esSend) a -> Eff (Handling tag : esSend) a
+type Handler e es r = ∀ esSend a. e :> esSend => HandleTag es r -> e (Eff esSend) a -> Eff esSend a
 
 -- | This "unsafe" @IO@ function is perfectly safe in the sense that it won't panic or otherwise cause undefined
 -- behaviors; it is only unsafe when it is used to embed arbitrary @IO@ actions in any effect environment,
@@ -165,7 +164,7 @@ unsafeIO m = Eff (const $ liftIO m)
 -- | Convert an effect handler into an internal representation with respect to a certain effect context and prompt
 -- frame.
 toInternalHandler :: ∀ e es r. Marker r -> Env es -> Handler e es r -> InternalHandler e
-toInternalHandler mark es hdl = InternalHandler \e -> alter Rec.pad $ hdl (HandleTag @() es mark) e
+toInternalHandler mark es hdl = InternalHandler \e -> hdl (HandleTag es mark) e
 
 -- | Do a trivial transformation over the effect context.
 alter :: (Env es' -> Env es) -> Eff es a -> Eff es' a
@@ -188,29 +187,23 @@ send e = Eff \es -> do
   unEff (runHandler ih e) es
 {-# INLINE send #-}
 
--- | A "localized computaton"; this should be parameterized with an existential variable so the computation with this
--- effect cannot escape a certain scope.
-data Localized (tag :: Type) :: Effect
-data Handling (tag :: Type) :: Effect
-
 -- | Perform an operation from the handle-site.
-embed :: Handling tag :> esSend => HandleTag tag es r -> Eff es a -> Eff esSend a
+embed :: HandleTag es r -> Eff es a -> Eff esSend a
 embed (HandleTag es _) (Eff m) = Eff \_ -> m es
 {-# INLINE embed #-}
 
 -- | Abort with a result value.
-abort :: Handling tag :> esSend => HandleTag tag es r -> Eff es r -> Eff esSend a
+abort :: HandleTag es r -> Eff es r -> Eff esSend a
 abort (HandleTag es mark) (Eff m) = Eff \_ -> Ctl $ pure $ Abort mark (m es)
 {-# INLINE abort #-}
 
 -- | Capture and gain control of the resumption. The resumption cannot escape the scope of the controlling function.
 control
-  :: Handling tag :> esSend
-  => HandleTag tag es r
-  -> (∀ tag'. (Eff esSend a -> Eff (Localized tag' : es) r) -> Eff (Localized tag' : es) r)
+  :: HandleTag es r
+  -> ((Eff esSend a -> Eff es r) -> Eff es r)
   -> Eff esSend a
 control (HandleTag es mark) f =
-  Eff \esSend -> Ctl $ pure $ Control mark (\cont -> unEff (f \(Eff x) -> Eff \_ -> cont $ x esSend) $! Rec.pad es) id
+  Eff \esSend -> Ctl $ pure $ Control mark (\cont -> unEff (f \(Eff x) -> Eff \_ -> cont $ x esSend) $! es) id
 {-# INLINE control #-}
 
 -- | Unwrap the 'Eff' monad.

@@ -61,7 +61,6 @@ module Sp.Eff (
     embed,
     abort,
     control,
-    Localized,
 
     -- * Trivial transformations
     KnownList,
