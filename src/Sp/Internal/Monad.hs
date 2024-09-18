@@ -130,8 +130,11 @@ newtype Eff (es :: [Effect]) (a :: Type) = Eff { unEff :: Env es -> Ctl a }
 -- | The internal representation of a handler of effect @e@. This representation is only valid within the original
 -- context in which the effect was introduced.
 type role InternalHandler nominal
-newtype InternalHandler e = InternalHandler
-  { runHandler :: ∀ es a. e :> es => e (Eff es) a -> Eff es a }
+data InternalHandler e =
+    forall es a. InternalHandler
+        !(Marker a)
+        (Env es)
+        (forall esSend x. e :> esSend => e (Eff esSend) x -> Eff esSend x) -- slow: `(Handler e es a)`
 
 instance Functor (Eff es) where
   fmap = liftM
@@ -164,7 +167,7 @@ unsafeIO m = Eff (const $ liftIO m)
 -- | Convert an effect handler into an internal representation with respect to a certain effect context and prompt
 -- frame.
 toInternalHandler :: ∀ e es r. Marker r -> Env es -> Handler e es r -> InternalHandler e
-toInternalHandler mark es hdl = InternalHandler \e -> hdl (HandleTag es mark) e
+toInternalHandler mark es hdl = InternalHandler mark es (\e -> hdl (HandleTag es mark) e)
 
 -- | Do a trivial transformation over the effect context.
 alter :: (Env es' -> Env es) -> Eff es a -> Eff es' a
@@ -183,8 +186,8 @@ handle f = \hdl (Eff m) -> Eff \es -> do
 -- | Perform an effect operation.
 send :: e :> es => e (Eff es) a -> Eff es a
 send e = Eff \es -> do
-  let ih = getHandlerCell $ Rec.index es
-  unEff (runHandler ih e) es
+  case getHandlerCell (Rec.index es) of
+    InternalHandler _ _ h -> unEff (h e) es
 {-# INLINE send #-}
 
 -- | Perform an operation from the handle-site.
