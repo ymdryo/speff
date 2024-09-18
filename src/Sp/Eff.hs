@@ -59,7 +59,6 @@ module Sp.Eff (
 
     -- ** Combinators to use in handlers
     embed,
-    withUnembed,
     abort,
     control,
     Localized,

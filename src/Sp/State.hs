@@ -11,7 +11,8 @@ module Sp.State
 import           Data.Functor      (($>))
 import           Data.IORef        (IORef, readIORef, writeIORef)
 import           Sp.Eff
-import           Sp.Internal.Monad (unsafeIO, unsafeState)
+import GHC.IORef (newIORef)
+import Sp.Internal.Monad (unsafeIO)
 
 
 -- | Provides a mutable state of type @s@.
@@ -39,15 +40,16 @@ state f = send (State f)
 
 handleState :: IORef s -> Handler (State s) es a
 handleState r _ = \case
-  Get     -> unsafeIO (readIORef r)
-  Put s   -> unsafeIO (writeIORef r s)
+  Get     -> unsafeIO $ readIORef r
+  Put s   -> unsafeIO $ writeIORef r s
   State f -> unsafeIO do
     (!s1, x) <- f <$> readIORef r
     writeIORef r s1 $> x
 
 -- | Run the 'State' effect with an initial value for the mutable state.
 runState :: s -> Eff (State s : es) a -> Eff es (a, s)
-runState s m = unsafeState s \r -> do
+runState s m = do
+  r <- unsafeIO $ newIORef s
   x <- interpret (handleState r) m
   s' <- unsafeIO (readIORef r)
   pure (x, s')

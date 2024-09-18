@@ -7,10 +7,10 @@ module Sp.Writer
   ) where
 
 import           Data.Foldable     (for_)
-import           Data.IORef        (IORef, modifyIORef', readIORef)
+import           Data.IORef        (IORef, modifyIORef', readIORef, newIORef)
 import           Data.Kind         (Type)
 import           Sp.Eff
-import           Sp.Internal.Monad (unsafeIO, unsafeState)
+import           Sp.Internal.Monad (unsafeIO)
 
 -- | Provides an append-only state, and also allows you to record what is appended in a specific scope.
 data Writer (w :: Type) :: Effect where
@@ -28,7 +28,8 @@ listen m = send (Listen m)
 handleWriter :: ∀ w es a. Monoid w => [IORef w] -> Handler (Writer w) es a
 handleWriter rs _ = \case
   Tell x   -> for_ rs \r -> unsafeIO (modifyIORef' r (<> x))
-  Listen m -> unsafeState mempty \r -> do
+  Listen m -> do
+    r <- unsafeIO $ newIORef mempty
     x <- replace (handleWriter $ r : rs) m
     w' <- unsafeIO (readIORef r)
     pure (x, w')
@@ -36,7 +37,8 @@ handleWriter rs _ = \case
 
 -- | Run the 'Writer' state, with the append-only state as a monoidal value.
 runWriter :: Monoid w => Eff (Writer w : es) a -> Eff es (a, w)
-runWriter m = unsafeState mempty \r -> do
+runWriter m = do
+  r <- unsafeIO $ newIORef mempty
   x <- interpret (handleWriter [r]) m
   w' <- unsafeIO (readIORef r)
   pure (x, w')

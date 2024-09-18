@@ -14,7 +14,7 @@ import           Control.Monad          (ap, liftM)
 import           Control.Monad.Catch    (MonadCatch, MonadThrow)
 import qualified Control.Monad.Catch    as Catch
 import           Control.Monad.IO.Class (MonadIO (liftIO))
-import           Data.IORef             (IORef, newIORef, readIORef, writeIORef)
+import           Data.IORef             (IORef, newIORef, readIORef)
 import           Data.Kind              (Type)
 import qualified Sp.Internal.Env        as Rec
 import           Sp.Internal.Env        (Rec, (:>))
@@ -105,20 +105,6 @@ prompt !mark (Ctl m) = Ctl $ m >>= \case
 prompt' = prompt
 {-# NOINLINE prompt' #-}
 
--- | Introduce a mutable state that behaves well wrt reentry.
-promptState, promptState' :: IORef s -> Ctl r -> Ctl r
-promptState !ref (Ctl m) = Ctl $ m >>= \case
-  Pure x -> pure $ Pure x
-  Abort mark x -> pure $ Abort mark x
-  Control mark ctl cont -> do
-    s0 <- liftIO (readIORef ref)
-    pure $ Control mark ctl \x -> do
-      liftIO (writeIORef ref s0)
-      promptState' ref (cont x)
-{-# INLINE promptState #-}
-promptState' = promptState
-{-# NOINLINE promptState' #-}
-
 -- | Unwrap the 'Ctl' monad.
 runCtl :: Ctl a -> IO a
 runCtl (Ctl m) = m >>= \case
@@ -176,14 +162,6 @@ unsafeIO :: IO a -> Eff es a
 unsafeIO m = Eff (const $ liftIO m)
 {-# INLINE unsafeIO #-}
 
--- | Introduce a mutable state that is well-behaved with respect to reentry. That is, no branch will observe mutations
--- by any other simultaneous branch. This stops behaving as expected if you pass the 'IORef' out of scope.
-unsafeState :: s -> (IORef s -> Eff es a) -> Eff es a
-unsafeState x0 f = Eff \es -> do
-  ref <- liftIO $ newIORef x0
-  promptState ref $ unEff (f ref) es
-{-# INLINE unsafeState #-}
-
 -- | Convert an effect handler into an internal representation with respect to a certain effect context and prompt
 -- frame.
 toInternalHandler :: ∀ e es r. Marker r -> Env es -> Handler e es r -> InternalHandler e
@@ -219,17 +197,6 @@ data Handling (tag :: Type) :: Effect
 embed :: Handling tag :> esSend => HandleTag tag es r -> Eff es a -> Eff esSend a
 embed (HandleTag es _) (Eff m) = Eff \_ -> m es
 {-# INLINE embed #-}
-
--- | Perform an operation from the handle-site, while being able to convert an operation from the perform-site to the
--- handle-site.
-withUnembed
-  :: Handling tag :> esSend
-  => HandleTag tag es r
-  -> (∀ tag'. (∀ x. Eff esSend x -> Eff (Localized tag' : es) x) -> Eff (Localized tag' : es) a)
-  -> Eff esSend a
-withUnembed (HandleTag es _) f =
-  Eff \esSend -> unEff (f \(Eff m) -> Eff \_ -> m esSend) $! Rec.pad es
-{-# INLINE withUnembed #-}
 
 -- | Abort with a result value.
 abort :: Handling tag :> esSend => HandleTag tag es r -> Eff es r -> Eff esSend a
