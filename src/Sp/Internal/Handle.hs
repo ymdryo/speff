@@ -157,7 +157,7 @@ type Replace es' = ∀ e es a. e :> es => Handler e (es' ++ es) a -> Eff es a ->
 -- | Replace and add extra effects based on type inference. If this does not work consider using the more concrete
 -- functions below.
 replace :: (e :> es, Suffix es es') => Handler e es' a -> Eff es a -> Eff es' a
-replace = rehandle \es -> Rec.suffix es
+replace = handle \_ es -> Rec.suffix es
 {-# INLINE replace #-}
 
 -- | Replace and don't add extra effects.
@@ -182,7 +182,7 @@ replace3 = replace
 
 -- | Replace and add a list of extra effects specified explicitly via @TypeApplications@.
 replaceN :: ∀ es'. KnownList es' => Replace es'
-replaceN = rehandle \es -> Rec.drop @es' es
+replaceN = handle \_ es -> Rec.drop @es' es
 {-# INLINE replaceN #-}
 
 --------------------------------------------------------------------------------

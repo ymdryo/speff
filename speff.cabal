@@ -83,7 +83,6 @@ library
   ghc-options:     -fdicts-strict -flate-dmd-anal -fspec-constr
   exposed-modules:
     Sp.Eff
-    Sp.Eff.Exception
     Sp.Error
     Sp.Internal.Env
     Sp.Internal.Monad
@@ -95,13 +94,6 @@ library
   other-modules:
     Sp.Internal.Handle
     Sp.Internal.Vec
-
-  if flag(native-delcont)
-    cpp-options:   -DSPEFF_NATIVE_DELCONT
-    other-modules: Sp.Internal.Ctl.Native
-
-  else
-    other-modules: Sp.Internal.Ctl.Monadic
 
 benchmark speff-bench
   import:         lang, dump
