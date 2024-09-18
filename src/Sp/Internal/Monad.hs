@@ -120,7 +120,7 @@ type Effect = (Type -> Type) -> Type -> Type
 -- | The concrete representation of an effect context: a record of internal handler representations.
 type Env = Rec HandlerCell
 
-newtype HandlerCell (e :: Effect) = HandlerCell { getHandlerCell :: IORef (InternalHandler e) }
+newtype HandlerCell (e :: Effect) = HandlerCell { getHandlerCell :: InternalHandler e }
 
 -- | The effect monad; it is parameterized by the /effect context/, i.e. a row of effects available. This monad is
 -- implemented with evidence passing and a delimited control monad with support of efficient tail-resumptive
@@ -177,14 +177,14 @@ alter f = \(Eff m) -> Eff \es -> m $! f es
 handle :: (HandlerCell e -> Env es' -> Env es) -> Handler e es' a -> Eff es a -> Eff es' a
 handle f = \hdl (Eff m) -> Eff \es -> do
   mark <- freshMarker
-  cell <- liftIO $ newIORef $ toInternalHandler mark es hdl
+  let cell = toInternalHandler mark es hdl
   prompt mark $ m $! f (HandlerCell cell) es
 {-# INLINE handle #-}
 
 -- | Perform an effect operation.
 send :: e :> es => e (Eff es) a -> Eff es a
 send e = Eff \es -> do
-  ih <- liftIO $ readIORef $ getHandlerCell $ Rec.index es
+  let ih = getHandlerCell $ Rec.index es
   unEff (runHandler ih e) es
 {-# INLINE send #-}
 
