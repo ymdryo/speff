@@ -11,34 +11,34 @@ data State s :: Effect where
     Put :: s -> State s ()
 
 -- | Get the mutable state.
-get :: (State s :> es, Monad m) => Eff m es s
+get :: (State s :> es) => Eff es s
 get = send Get
 
 -- | Write a new value to the mutable state.
-put :: (State s :> es, Monad m) => s -> Eff m es ()
+put :: (State s :> es) => s -> Eff es ()
 put x = send (Put x)
 
 -- | Apply a function to the mutable state.
-modify :: (State s :> es, Monad m) => (s -> s) -> Eff m es ()
+modify :: (State s :> es) => (s -> s) -> Eff es ()
 modify f = state ((,()) . f)
 
 {- | Apply a function of type @s -> (s, a)@ on the mutable state, using the returned @s@ as the new state and
  returning the @a@.
 -}
-state :: (State s :> es, Monad m) => (s -> (s, a)) -> Eff m es a
+state :: (State s :> es) => (s -> (s, a)) -> Eff es a
 state f = do
     s <- get
     let (s', a) = f s
     put s'
     pure a
 
-handleState :: MonadIO m => IORef s -> Handler m (State s) es a
+handleState :: IORef s -> Handler (State s) es a
 handleState ref _ = \case
     Get -> liftIO $ readIORef ref
     Put s -> liftIO $ writeIORef ref s
 
 -- | Run the 'State' effect with an initial value for the mutable state.
-runState :: forall s es m a. MonadIO m => s -> Eff m (State s : es) a -> Eff m es (a, s)
+runState :: forall s es a. s -> Eff (State s : es) a -> Eff es (a, s)
 runState s0 m = do
     ref <- liftIO $ newIORef s0
     interpret0 (handleState ref) do

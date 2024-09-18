@@ -29,7 +29,7 @@ import Sp.Internal.Monad qualified as S
 import Sp.Reader qualified as S
 import Sp.State qualified as S
 
-programSp :: S.State Int S.:> es => S.Eff IO es Int
+programSp :: S.State Int S.:> es => S.Eff es Int
 programSp = do
     x <- S.get @Int
     if x == 0
@@ -40,10 +40,10 @@ programSp = do
 {-# NOINLINE programSp #-}
 
 countdownSp :: Int -> (Int, Int)
-countdownSp n = S.runPure' $ S.runState n programSp
+countdownSp n = S.runPure $ S.runState n programSp
 
 countdownSpDeep :: Int -> (Int, Int)
-countdownSpDeep n = S.runPure' $ runR $ runR $ runR $ runR $ runR $ S.runState n $ runR $ runR $ runR $ runR $ runR $ programSp
+countdownSpDeep n = S.runPure $ runR $ runR $ runR $ runR $ runR $ S.runState n $ runR $ runR $ runR $ runR $ runR $ programSp
   where
     runR = S.runReader ()
 
