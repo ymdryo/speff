@@ -155,7 +155,7 @@ instance Monad (Eff es) where
 data HandleTag e (es :: [Effect]) (r :: Type) = HandleTag (Env es) !(Marker e es r)
 
 -- | A handler of effect @e@ introduced in context @es@ over a computation returning @r@.
-type Handler e es r = ∀ esSend a. e :> esSend => HandleTag e es r -> e (Eff esSend) a -> Eff esSend a
+type Handler e es r = ∀ e' esSend a. (e' :> esSend, e :> esSend) => HandleTag e' es r -> e (Eff esSend) a -> Eff esSend a
 
 -- | This "unsafe" @IO@ function is perfectly safe in the sense that it won't panic or otherwise cause undefined
 -- behaviors; it is only unsafe when it is used to embed arbitrary @IO@ actions in any effect environment,
