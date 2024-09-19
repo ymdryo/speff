@@ -95,10 +95,10 @@ prompt, prompt' :: (Env es' -> Env es) -> Marker e es' a -> Eff es a -> Eff es' 
 prompt f !mark (Eff m) = Eff \es -> Ctl $ unCtl (m $ f es) >>= \case
   Pure a -> pure $ Pure a
   Abort mark' r -> case eqMarker mark mark' of
-    Just (Refl,Refl) -> undefined
+    Just (Refl,Refl) -> unCtl r
     Nothing   -> pure $ Abort mark' r
   Control mark' ctl cont -> case eqMarker mark mark' of
-    Just (Refl,Refl) -> undefined
+    Just (Refl,Refl) -> unCtl $ unEff (ctl (prompt' f mark . cont)) es
     Nothing   -> pure $ Control mark' ctl (prompt' f mark . cont)
 {-# INLINE prompt #-}
 prompt' = prompt
@@ -209,6 +209,7 @@ under !mark evv (Eff m) = Eff \_ ->
         Pure x -> Pure x
         Abort mark' m' -> Abort mark' m'
         Control mark' ctl k -> Control mark' ctl $ resumeUnder @e mark k
+{-# INLINE under #-}
 
 resumeUnder :: forall e es es' ans a b. (e :> es) => Marker e es' ans -> (b -> Eff es' a) -> (b -> Eff es a)
 resumeUnder !mark k x =
@@ -218,6 +219,7 @@ resumeUnder !mark k x =
                 case eqMarker mark mark' of
                     Just (Refl,Refl) -> unEff (under @e mark evv' (k x)) undefined
                     Nothing -> error "unreachable"
+{-# NOINLINE resumeUnder #-}
 
 -- | Abort with a result value.
 abort :: HandleTag e es r -> Eff es r -> Eff esSend a
