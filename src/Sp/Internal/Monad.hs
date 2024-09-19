@@ -217,7 +217,7 @@ resumeUnder !mark k x =
         case getHandlerCell (Rec.index @e es) of
             InternalHandler mark' evv' _ ->
                 case eqMarker mark mark' of
-                    Just (Refl,Refl) -> unEff (under @e mark evv' (k x)) undefined
+                    Just (Refl,Refl) -> unEff (under @e mark evv' (k x)) es
                     Nothing -> error "unreachable"
 {-# NOINLINE resumeUnder #-}
 
