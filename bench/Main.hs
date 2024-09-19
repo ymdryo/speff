@@ -11,8 +11,8 @@ import           Test.Tasty.Bench
 main :: IO ()
 main = defaultMain
   [ bgroup "countdown" $ [10000] <&> \x -> bgroup (show x)
-    [ bench "sp.shallow" $ nf countdownSp x
-    , bench "sp.deep" $ nf countdownSpDeep x
+    [ bench "sp_modified_for_non_scoped_resumption_support.shallow" $ nf countdownSp x
+    , bench "sp_modified_for_non_scoped_resumption_support.deep" $ nf countdownSpDeep x
 #if SPEFF_BENCH_EFFECTFUL
     , bench "effectful.shallow" $ nf countdownEffectful x
     , bench "effectful.deep" $ nf countdownEffectfulDeep x
@@ -31,8 +31,8 @@ main = defaultMain
     , bench "sem.deep" $ nf countdownSemDeep x
     ]
   , bgroup "pyth" $ [32] <&> \x -> bgroup (show x)
-    [ bench "sp.shallow" $ nf pythSp x
-    , bench "sp.deep" $ nf pythSpDeep x
+    [ bench "sp_modified_for_non_scoped_resumption_support.shallow" $ nf pythSp x
+    , bench "sp_modified_for_non_scoped_resumption_support.deep" $ nf pythSpDeep x
     , bench "ev.shallow" $ nf pythEv x
     , bench "ev.deep" $ nf pythEvDeep x
 #ifdef SPEFF_BENCH_FREER_SIMPLE
@@ -45,8 +45,8 @@ main = defaultMain
     , bench "sem.deep" $ nf pythSemDeep x
     ]
   , bgroup "catch" $ [10000] <&> \x -> bgroup (show x)
-    [ bench "sp.shallow" $ nf catchSp x
-    , bench "sp.deep" $ nf catchSpDeep x
+    [ bench "sp_modified_for_non_scoped_resumption_support.shallow" $ nf catchSp x
+    , bench "sp_modified_for_non_scoped_resumption_support.deep" $ nf catchSpDeep x
 #if SPEFF_BENCH_EFFECTFUL
     , bench "effectful.shallow" $ nf catchEffectful x
     , bench "effectful.deep" $ nf catchEffectfulDeep x
@@ -57,8 +57,8 @@ main = defaultMain
     , bench "sem.deep" $ nf catchSemDeep x
     ]
   , bgroup "local" $ [10000] <&> \x -> bgroup (show x)
-    [ bench "sp.shallow" $ nf localSp x
-    , bench "sp.deep" $ nf localSpDeep x
+    [ bench "sp_modified_for_non_scoped_resumption_support.shallow" $ nf localSp x
+    , bench "sp_modified_for_non_scoped_resumption_support.deep" $ nf localSpDeep x
 #if SPEFF_BENCH_EFFECTFUL
     , bench "effectful.shallow" $ nf localEffectful x
     , bench "effectful.deep" $ nf localEffectfulDeep x
