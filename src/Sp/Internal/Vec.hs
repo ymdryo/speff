@@ -17,6 +17,7 @@ module Sp.Internal.Vec
   , take
   , index
   , update
+  , mapFoldr
   , pick
   , extract
   , DropPhase (..)
@@ -29,6 +30,7 @@ import           Data.Kind            (Type)
 import           Data.Primitive.Array (Array, MutableArray, copyArray, emptyArray, indexArray, newArray, runArray,
                                        writeArray)
 import           Prelude              hiding (concat, drop, head, length, tail, take)
+import Control.Monad (when)
 
 -- | A vector (i.e. array slice) type. One special feature of this type is that it supports efficient (/O/(1))
 -- prepending of "inaccessible" elements.
@@ -102,6 +104,22 @@ update ix x (Vec off len arr) = Vec 0 len $ runArray do
   copyArrayOffset marr 0 arr off (off + len)
   writeArray marr ix x
   pure marr
+
+mapFoldr :: (forall r. ((a -> b) -> r -> r) -> r -> r) -> Vec a -> Vec b
+mapFoldr folder (Vec off len arr) = Vec off len $ runArray do
+    marr <- newArray len nil
+    folder
+        (\f k -> \ix -> do
+            if (ix >= len) then
+                pure marr
+            else do
+                when (ix >= 0) do
+                    writeArray marr ix (f $ indexArray arr ix)
+                k $ ix + 1
+        )
+        (\_ -> pure marr)
+        (-off)
+
 
 -- | Get a known subset of the vector. \( O(m) \).
 pick :: Int -> [Int] -> Vec a -> Vec a

@@ -40,15 +40,20 @@ module Sp.Internal.Env
   , type AllMembers
   , type Subset
   , extract
+  , Forall (..)
+  , map
   ) where
 
 import           Data.Kind       (Constraint, Type)
 import           GHC.Exts        (Any)
 import           GHC.TypeLits    (ErrorMessage (ShowType, Text, (:<>:)), TypeError)
-import           Prelude         hiding (concat, drop, head, length, tail, take)
+import           Prelude         hiding (concat, drop, head, length, tail, take, map)
 import qualified Sp.Internal.Vec as Vec
 import           Sp.Internal.Vec (ConcatPhase (..), DropPhase (..), Vec)
 import           Unsafe.Coerce   (unsafeCoerce)
+import Data.Proxy (Proxy (Proxy))
+import Data.Constraint (Dict (Dict))
+import GHC.Base (withDict)
 
 -- | Extensible record type supporting efficient /O/(1) reads.
 type role Rec representational nominal
@@ -163,6 +168,24 @@ index (Rec vec) = fromAny $ Vec.index (reifyIndex @_ @e @es) vec
 update :: ∀ e es f. e :> es => f e -> Rec f es -> Rec f es
 update x (Rec vec) = Rec $ Vec.update (reifyIndex @_ @e @es) (toAny x) vec
 {-# INLINE update #-}
+
+map :: forall c es f g. Forall c es => (forall e. (c e, e :> es) => f e -> g e) -> Rec f es -> Rec g es
+map f (Rec vec) =
+    Rec $ (`Vec.mapFoldr` vec) \modify ->
+        foldrForall @_ @c @es \(_ :: Proxy e) ->
+            modify $ toAny . f @e . fromAny
+{-# INLINE map #-}
+
+class Forall (c :: k -> Constraint) (es :: [k]) where
+    foldrForall :: (forall e. (c e, e :> es) => Proxy e -> r -> r) -> r -> r
+instance Forall c '[] where
+    foldrForall _ = id
+instance (c e, Forall c es) => Forall c (e ': es) where
+    foldrForall f = f (Proxy @e) . foldrForall @_ @c @es \(e' :: Proxy e') -> weaken @e' @e @es $ f e'
+
+weaken :: forall e' e es r. e' :> es => (e' :> e ': es => r) -> r
+weaken x = withDict @(e' :> e ': es) (reifyIndex @_ @e' @es + 1) x
+{-# INLINE weaken #-}
 
 --------------------------------------------------------------------------------
 -- Subset Operations -----------------------------------------------------------

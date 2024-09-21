@@ -31,6 +31,7 @@ common lang
     , base        >=4.12  && <4.20
     , exceptions  ^>=0.10
     , primitive   >=0.8   && <0.10
+    , constraints
 
   ghc-options:
     -Wall -Widentities -Wincomplete-record-updates
@@ -83,13 +84,13 @@ library
   ghc-options:     -fdicts-strict -flate-dmd-anal -fspec-constr
   exposed-modules:
     Sp.Eff
-    Sp.Error
+    -- Sp.Error
     Sp.Internal.Env
     Sp.Internal.Monad
-    Sp.NonDet
-    Sp.Reader
-    Sp.State
-    Sp.Writer
+    -- Sp.NonDet
+    -- Sp.Reader
+   --  Sp.State
+    -- Sp.Writer
     Sp.Test
 
   other-modules:
