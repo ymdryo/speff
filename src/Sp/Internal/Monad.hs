@@ -10,15 +10,12 @@
 -- The effect monad, along with handling combinators that enable delimited control and higher-order effects.
 module Sp.Internal.Monad where
 
-import           Control.Monad          (ap, liftM)
-import           Control.Monad.Catch    (MonadCatch, MonadThrow)
-import qualified Control.Monad.Catch    as Catch
+import           Control.Monad          (ap, liftM, (<=<))
 import           Control.Monad.IO.Class (MonadIO (liftIO))
 import           Data.Kind              (Type)
 import qualified Sp.Internal.Env        as Rec
 import           Sp.Internal.Env        (Rec, (:>))
 import           System.IO.Unsafe       (unsafePerformIO)
-import qualified Control.Exception      as Exception
 import           Data.Primitive.PrimVar (PrimVar, fetchAddInt, newPrimVar)
 import           Data.Type.Equality     (type (:~:) (Refl))
 import           GHC.Exts               (RealWorld)
@@ -31,8 +28,8 @@ uniqueSource = unsafePerformIO (newPrimVar 0)
 {-# NOINLINE uniqueSource #-}
 
 -- | Create a fresh 'Marker'.
-freshMarker :: Ctl es (Marker e es' a)
-freshMarker = liftIO $ Marker <$> fetchAddInt uniqueSource 1
+freshMarker :: Eff es (Marker e es' a)
+freshMarker = Eff \_ -> Ctl $ fmap Pure $ Marker <$> fetchAddInt uniqueSource 1
 
 -- | A @'Marker' a@ marks a prompt frame over a computation returning @a@.
 type role Marker nominal nominal representational
@@ -51,44 +48,12 @@ data Result es (a :: Type)
   -- ^ The computation returned normally.
   | ∀ (r :: Type) e es'. Abort !(Marker e es' r) (Ctl es' r)
   -- ^ The computation replaced itself with another computation.
-  | ∀ (r :: Type) e es' (b :: Type). Control !(Marker e es' r) ((b -> Eff es' r) -> Eff es' r) (b -> Eff es a)
+  | ∀ (r :: Type) e es' (b :: Type). Control !(Marker e es' r) !((b -> Eff es' r) -> Eff es' r) !(b -> Eff es a)
   -- ^ The computation captured a resumption and gained control over it. Specifically, this uses @shift0@ semantics.
-
--- | Extend the captured continuation with a function, if it exists.
-extend :: (Ctl es a -> Ctl es a) -> Result es a -> Result es a
-extend f = \case
-  Pure a                -> Pure a
-  Abort mark r          -> Abort mark r
-  Control mark ctl cont -> Control mark ctl ((\(Eff m) -> Eff \es -> f $ m es) . cont)
 
 -- | The delimited control monad, with efficient support of tail-resumptive computations.
 type role Ctl nominal representational
 newtype Ctl es (a :: Type) = Ctl { unCtl :: IO (Result es a) }
-
-instance Functor (Ctl es) where
-  fmap = liftM
-
-instance Applicative (Ctl es) where
-  pure = Ctl . pure . Pure
-  (<*>) = ap
-
-instance Monad (Ctl es) where
-  (Ctl x) >>= f = Ctl $ x >>= \case
-    Pure a                -> unCtl (f a)
-    Abort mark r          -> pure $ Abort mark r
-    Control mark ctl cont -> pure $ Control mark ctl (f `compose` cont)
-
--- | This loopbreaker is crucial to the performance of the monad.
-compose :: (b -> Ctl es c) -> (a -> Eff es b) -> a -> Eff es c
-compose g f x = Eff \es -> unEff (f x) es >>= g
-{-# NOINLINE compose #-}
-
--- | Lift an 'IO' function to a 'Ctl' function. The function must not alter the result.
-liftMap, liftMap' :: (IO (Result es a) -> IO (Result es a)) -> Ctl es a -> Ctl es a
-liftMap f (Ctl m) = Ctl $ extend (liftMap' f) <$> f m
-{-# INLINE liftMap #-}
-liftMap' = liftMap
-{-# NOINLINE liftMap' #-}
 
 -- | Install a prompt frame.
 prompt, prompt' :: (Env es' -> Env es) -> Marker e es' a -> Eff es a -> Eff es' a
@@ -141,14 +106,22 @@ instance Functor (Eff es) where
   {-# INLINE fmap #-}
 
 instance Applicative (Eff es) where
-  pure x = Eff \_ -> pure x
+  pure x = Eff \_ -> Ctl $ pure $ Pure $ x
   {-# INLINE pure #-}
   (<*>) = ap
   {-# INLINE (<*>) #-}
 
 instance Monad (Eff es) where
-  Eff m >>= f = Eff \es -> m es >>= \x -> unEff (f x) es
+  Eff m >>= f = Eff \es -> Ctl $ unCtl (m es) >>= \case
+    Pure a                -> unCtl (unEff (f a) es)
+    Abort mark r          -> pure $ Abort mark r
+    Control mark ctl cont -> pure $ Control mark ctl (f `compose` cont)
   {-# INLINE (>>=) #-}
+
+-- | This loopbreaker is crucial to the performance of the monad.
+compose :: (b -> Eff es c) -> (a -> Eff es b) -> a -> Eff es c
+compose = (<=<)
+{-# NOINLINE compose #-}
 
 -- | The tag associated to a handler that was /introduced/ in context @es@ over an computation with
 -- /eventual result type/ @r@. Value of this type enables delimited control and scoped effects.
@@ -161,7 +134,7 @@ type Handler e es r = ∀ e' esSend a. (e' :> esSend, e :> esSend) => HandleTag 
 -- behaviors; it is only unsafe when it is used to embed arbitrary @IO@ actions in any effect environment,
 -- therefore breaking effect abstraction.
 unsafeIO :: IO a -> Eff es a
-unsafeIO m = Eff (const $ liftIO m)
+unsafeIO m = Eff (const $ Ctl $ fmap Pure $ m)
 {-# INLINE unsafeIO #-}
 
 -- | Convert an effect handler into an internal representation with respect to a certain effect context and prompt
@@ -185,10 +158,10 @@ alterCtl f = \(Ctl m) -> Ctl $ m <&> \case
 -- | General effect handling. Introduce a prompt frame, convert the supplied handler to an internal one wrt that
 -- frame, and then supply the internal handler to the given function to let it add that to the effect context.
 handle :: (HandlerCell e -> Env es' -> Env es) -> Handler e es' a -> Eff es a -> Eff es' a
-handle f = \hdl m -> Eff \es -> do
+handle f = \hdl m -> do
   mark <- freshMarker
   -- let cell = toInternalHandler mark es hdl
-  unEff (prompt (\es' -> f (HandlerCell $ toInternalHandler mark es' hdl) es') mark m) es
+  prompt (\es' -> f (HandlerCell $ toInternalHandler mark es' hdl) es') mark m
 {-# INLINE handle #-}
 
 -- | Perform an effect operation.
@@ -247,27 +220,7 @@ instance IOE :> es => MonadIO (Eff es) where
   liftIO = unsafeIO
   {-# INLINE liftIO #-}
 
-instance MonadThrow (Eff es) where
-  throwM x = Eff \_ -> Catch.throwM x
-  {-# INLINE throwM #-}
-
-instance IOE :> es => MonadCatch (Eff es) where
-  catch (Eff m) h = Eff \es -> Catch.catch (m es) \ex -> unEff (h ex) es
-  {-# INLINE catch #-}
-
 -- | Unwrap an 'Eff' monad with 'IO' computations.
 runIOE :: Eff '[IOE] a -> IO a
 runIOE m = runCtl $ unEff m (Rec.pad Rec.empty)
 {-# INLINE runIOE #-}
-
-
-instance MonadIO (Ctl es) where
-  liftIO = Ctl . fmap Pure
-
-instance MonadThrow (Ctl es) where
-  throwM = Ctl . Exception.throwIO
-
--- | Note that although both catching and masking are possible, implementing 'Catch.generalBracket' via them will not
--- be well-behaved wrt reentry; hence 'Ctl' is not 'Catch.MonadMask'.
-instance MonadCatch (Ctl es) where
-  catch m h = liftMap (Exception.handle (unCtl . h)) m
