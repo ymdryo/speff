@@ -3,7 +3,9 @@ module Sp.Test where
 import Control.Monad.IO.Class (liftIO)
 import Sp.Eff
 import Sp.Internal.Monad (unsafeIO)
+import Sp.Reader (runReader, ask)
 
+{-
 data Yield a b :: Effect where
     Yield :: a -> Yield a b m b
 
@@ -30,3 +32,21 @@ spTest = runIOE do
                 Done () -> liftIO $ putStrLn "Done."
                 Coroutine n' _ -> liftIO $ putStrLn $ "Continue... " <> show n'
             pure ()
+-}
+
+data State s :: Effect where
+    Get :: State s m s
+    Put :: s -> State s m ()
+
+runState :: s -> Eff (State s ': ef) a -> Eff ef a
+runState s m = runReader s . interpret0 (\tag -> \case
+        Get -> embed tag ask
+        Put s' -> control tag \k -> lift1 $ runReader s' $ k $ pure ()
+    ) $ lift1Under1 m
+
+
+spTest :: IO ()
+spTest = runIOE . runState "A" $ do
+    s0 :: String <- send Get
+    send $ Put $ s0 <> "B"
+    liftIO . print @String =<< send Get
