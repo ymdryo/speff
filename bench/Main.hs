@@ -72,8 +72,9 @@ main = defaultMain
   , bgroup "coroutine" $ [10000] <&> \x -> bgroup (show x)
     [ bench "sp_modified_for_non_scoped_resumption_support.shallow" $ nf coroutineSp x
     , bench "sp_modified_for_non_scoped_resumption_support.deep" $ nf coroutineSpDeep x
+    , bench "mp.shallow" $ nf coroutineMp x
+    , bench "mp.deep" $ nf coroutineMpDeep x
     , bench "freer.shallow" $ nf coroutineFreer x
     , bench "freer.deep" $ nf coroutineFreerDeep x
     ]
-
   ]

@@ -5,25 +5,10 @@ import qualified Sp.Reader                     as S
 import qualified Sp.Coroutine                  as S
 import qualified Control.Monad.Freer           as FS
 import qualified Control.Monad.Freer.Coroutine as FS
-import Control.Monad (forM)
 import qualified Control.Monad.Freer.Reader as FS
-
-{-
-programSp :: (S.Coroutine S.:> e) => Int -> S.Eff e (Int, Int, Int)
-programSp upbound = do
-  x <- S.choice [1..upbound]
-  y <- S.choice [1..upbound]
-  z <- S.choice [1..upbound]
-  if x*x + y*y == z*z then return (x,y,z) else S.send S.Empty
-{-# NOINLINE programSp #-}
-
-pythSp :: Int -> [(Int, Int, Int)]
-pythSp n = S.runEff $ S.runNonDet $ programSp n
-
-pythSpDeep :: Int -> [(Int, Int, Int)]
-pythSpDeep n = S.runEff $ run $ run $ run $ run $ run $ S.runNonDet $ run $ run $ run $ run $ run $ programSp n
-  where run = S.runReader ()
--}
+import qualified Control.Mp.Eff as M
+import qualified Control.Mp.Util as M
+import Control.Monad (forM)
 
 programSp :: S.Yield Int Int S.:> es => Int -> S.Eff es [Int]
 programSp upbound =
@@ -41,6 +26,22 @@ coroutineSp n = S.runEff $ loopStatusSp =<< S.runCoroutine (programSp n)
 coroutineSpDeep :: Int -> [Int]
 coroutineSpDeep n = S.runEff $ run $ run $ run $ run $ run $ loopStatusSp =<< S.runCoroutine (run $ run $ run $ run $ run $ programSp n)
   where run = S.runReader ()
+
+
+programMp :: M.Yield Int Int M.:? e => Int -> M.Eff e [Int]
+programMp n = forM [0..n] $ \i -> M.perform M.yield i
+
+loopStatusMp :: M.Status e Int Int r -> M.Eff e r
+loopStatusMp = \case
+    M.Done r -> pure r
+    M.Continue a k -> k (a+100) >>= loopStatusMp
+
+coroutineMp :: Int -> [Int]
+coroutineMp n = M.runEff $ loopStatusMp =<< M.coroutine @Int @Int (programMp n)
+
+coroutineMpDeep :: Int -> [Int]
+coroutineMpDeep n = M.runEff $ run $ run $ run $ run $ run $ loopStatusMp =<< M.coroutine @Int @Int (run $ run $ run $ run $ run $ programMp n)
+  where run = M.reader ()
 
 
 programFreer :: FS.Member (FS.Yield Int Int) es => Int -> FS.Eff es [Int]

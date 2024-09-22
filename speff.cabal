@@ -110,6 +110,7 @@ benchmark speff-bench
     , mtl            >=2.2  && <2.4
     , polysemy       ^>=1.9
     , speff
+    , mpeff
     , tasty-bench    ^>=0.3
 
   cpp-options:    -DSPEFF_BENCH_FREER_SIMPLE
