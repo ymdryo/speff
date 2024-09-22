@@ -1,7 +1,6 @@
 module Sp.Test where
 
-import Control.Effect
-import Control.Effect.Coroutine
+import Control.Effect (runCoroutine, yield, run, Coroutine, Status(..), type (:<), Eff)
 import Control.Monad (forM)
 
 programEff :: Coroutine Int Int :< es => Eff es [Int]
@@ -12,6 +11,8 @@ loopStatusEff = \case
     Done r -> pure r
     Yielded i f -> loopStatusEff =<< runCoroutine (f (i+100))
 
+-- rather `effTest`.
+-- coroutine semantics test for `eff`.
 spTest :: IO ()
 spTest = do
     print @[Int] $ run do
