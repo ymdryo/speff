@@ -31,6 +31,7 @@ coroutineSpDeep n = S.runEff $ run $ run $ run $ run $ run $ loopStatusSp =<< S.
 
 programMp :: M.Yield Int Int M.:? e => Int -> M.Eff e [Int]
 programMp n = forM [0..n] $ \i -> M.perform M.yield i
+{-# NOINLINE programMp #-}
 
 loopStatusMp :: M.Status e Int Int r -> M.Eff e r
 loopStatusMp = \case
@@ -65,6 +66,7 @@ coroutineFreerDeep n = FS.run $ run $ run $ run $ run $ run $ loopStatusFreer =<
 programEff :: E.Coroutine Int Int E.:< es => Int -> E.Eff es [Int]
 programEff upbound =
     forM [1..upbound] \i -> E.yield @Int @Int i
+{-# NOINLINE programEff #-}
 
 loopStatusEff :: E.Status es Int Int r -> E.Eff es r
 loopStatusEff = \case
