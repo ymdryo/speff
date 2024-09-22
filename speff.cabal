@@ -31,6 +31,7 @@ common lang
     , base        >=4.12  && <4.20
     , exceptions  ^>=0.10
     , primitive   >=0.8   && <0.10
+    , eff
 
   ghc-options:
     -Wall -Widentities -Wincomplete-record-updates
@@ -111,6 +112,7 @@ benchmark speff-bench
     , polysemy       ^>=1.9
     , speff
     , mpeff
+    , eff
     , tasty-bench    ^>=0.3
 
   cpp-options:    -DSPEFF_BENCH_FREER_SIMPLE

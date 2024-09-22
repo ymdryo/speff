@@ -76,5 +76,7 @@ main = defaultMain
     , bench "mp.deep" $ nf coroutineMpDeep x
     , bench "freer.shallow" $ nf coroutineFreer x
     , bench "freer.deep" $ nf coroutineFreerDeep x
+    , bench "eff.shallow" $ nf coroutineEff x
+    , bench "eff.deep" $ nf coroutineEffDeep x
     ]
   ]

@@ -9,6 +9,7 @@ import qualified Control.Monad.Freer.Reader as FS
 import qualified Control.Mp.Eff as M
 import qualified Control.Mp.Util as M
 import Control.Monad (forM)
+import qualified Control.Effect as E
 
 programSp :: S.Yield Int Int S.:> es => Int -> S.Eff es [Int]
 programSp upbound =
@@ -60,3 +61,19 @@ coroutineFreer n = FS.run $ loopStatusFreer =<< FS.runC (programFreer n)
 coroutineFreerDeep :: Int -> [Int]
 coroutineFreerDeep n = FS.run $ run $ run $ run $ run $ run $ loopStatusFreer =<< FS.runC (run $ run $ run $ run $ run $ programFreer n)
   where run = FS.runReader ()
+
+programEff :: E.Coroutine Int Int E.:< es => Int -> E.Eff es [Int]
+programEff upbound =
+    forM [1..upbound] \i -> E.yield @Int @Int i
+
+loopStatusEff :: E.Status es Int Int r -> E.Eff es r
+loopStatusEff = \case
+    E.Done r -> pure r
+    E.Yielded i f -> loopStatusEff =<< E.runCoroutine (f (i+100))
+
+coroutineEff :: Int -> [Int]
+coroutineEff n = E.run $ loopStatusEff =<< E.runCoroutine (programEff n)
+
+coroutineEffDeep :: Int -> [Int]
+coroutineEffDeep n = E.run $ run $ run $ run $ run $ run $ loopStatusEff =<< E.runCoroutine (run $ run $ run $ run $ run $ programEff n)
+  where run = E.runReader ()
