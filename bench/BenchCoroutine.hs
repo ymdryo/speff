@@ -20,6 +20,7 @@ loopStatusSp :: S.Status es Int Int r -> S.Eff es r
 loopStatusSp = \case
     S.Done r -> pure r
     S.Continue i f -> loopStatusSp =<< f (i+100)
+{-# NOINLINE loopStatusSp #-}
 
 coroutineSp :: Int -> [Int]
 coroutineSp n = S.runEff $ loopStatusSp =<< S.runCoroutine (programSp n)
@@ -36,7 +37,8 @@ programMp n = forM [0..n] $ \i -> M.perform M.yield i
 loopStatusMp :: M.Status e Int Int r -> M.Eff e r
 loopStatusMp = \case
     M.Done r -> pure r
-    M.Continue a k -> k (a+100) >>= loopStatusMp
+    M.Continue a k -> loopStatusMp =<< k (a+100)
+{-# NOINLINE loopStatusMp #-}
 
 coroutineMp :: Int -> [Int]
 coroutineMp n = M.runEff $ loopStatusMp =<< M.coroutine @Int @Int (programMp n)
@@ -55,6 +57,7 @@ loopStatusFreer :: FS.Status es Int Int r -> FS.Eff es r
 loopStatusFreer = \case
     FS.Done r -> pure r
     FS.Continue i f -> loopStatusFreer =<< f (i+100)
+{-# NOINLINE loopStatusFreer #-}
 
 coroutineFreer :: Int -> [Int]
 coroutineFreer n = FS.run $ loopStatusFreer =<< FS.runC (programFreer n)
@@ -72,6 +75,7 @@ loopStatusEff :: E.Status es Int Int r -> E.Eff es r
 loopStatusEff = \case
     E.Done r -> pure r
     E.Yielded i f -> loopStatusEff =<< E.runCoroutine (f (i+100))
+{-# NOINLINE loopStatusEff #-}
 
 coroutineEff :: Int -> [Int]
 coroutineEff n = E.run $ loopStatusEff =<< E.runCoroutine (programEff n)
