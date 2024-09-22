@@ -90,6 +90,7 @@ library
     Sp.Reader
     Sp.State
     Sp.Writer
+    Sp.Coroutine
     Sp.Test
 
   other-modules:
@@ -122,6 +123,7 @@ benchmark speff-bench
     BenchCountdown
     BenchLocal
     BenchPyth
+    BenchCoroutine
 
 executable Main
     import: lang

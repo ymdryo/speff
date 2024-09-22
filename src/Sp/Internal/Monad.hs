@@ -48,7 +48,7 @@ data Result es (a :: Type)
   -- ^ The computation returned normally.
   | ∀ (r :: Type) e es'. Abort !(Marker e es' r) (Ctl es' r)
   -- ^ The computation replaced itself with another computation.
-  | ∀ (r :: Type) e es' (b :: Type). Control !(Marker e es' r) !((b -> Eff es' r) -> Eff es' r) !(b -> Eff es a)
+  | ∀ (r :: Type) e es' (b :: Type). Control !(Marker e es' r) ((b -> Eff es' r) -> Eff es' r) (b -> Eff es a)
   -- ^ The computation captured a resumption and gained control over it. Specifically, this uses @shift0@ semantics.
 
 -- | The delimited control monad, with efficient support of tail-resumptive computations.
