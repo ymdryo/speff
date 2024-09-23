@@ -20,7 +20,7 @@ import qualified Sp.Eff                        as S
 import qualified Sp.NonDet                     as S
 import qualified Sp.Reader                     as S
 
-programSp :: (S.NonDet S.:> e) => Int -> S.Eff e (Int, Int, Int)
+programSp :: (S.NonDet S.:> ef) => Int -> S.Eff eh ef (Int, Int, Int)
 programSp upbound = do
   x <- S.choice [1..upbound]
   y <- S.choice [1..upbound]
@@ -33,7 +33,7 @@ pythSp n = S.runEff $ S.runNonDet $ programSp n
 
 pythSpDeep :: Int -> [(Int, Int, Int)]
 pythSpDeep n = S.runEff $ run $ run $ run $ run $ run $ S.runNonDet $ run $ run $ run $ run $ run $ programSp n
-  where run = S.runReader ()
+  where run = S.runAsk' ()
 
 programEv :: (E.Choose E.:? e) => Int -> E.Eff e (Int, Int, Int)
 programEv upbound = do

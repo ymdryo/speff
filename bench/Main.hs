@@ -47,7 +47,12 @@ main = defaultMain
     ]
   , bgroup "catch" $ [10000] <&> \x -> bgroup (show x)
     [ bench "sp_modified_for_non_scoped_resumption_support.shallow" $ nf catchSp x
-    , bench "sp_modified_for_non_scoped_resumption_support.deep" $ nf catchSpDeep x
+    , bench "sp_modified_for_non_scoped_resumption_support.deep0" $ nf catchSpDeep0 x
+    , bench "sp_modified_for_non_scoped_resumption_support.deep1" $ nf catchSpDeep1 x
+    , bench "sp_modified_for_non_scoped_resumption_support.deep2" $ nf catchSpDeep2 x
+    , bench "sp_modified_for_non_scoped_resumption_support.deep3" $ nf catchSpDeep3 x
+    , bench "sp_modified_for_non_scoped_resumption_support.deep4" $ nf catchSpDeep4 x
+    , bench "sp_modified_for_non_scoped_resumption_support.deep5" $ nf catchSpDeep5 x
 #if SPEFF_BENCH_EFFECTFUL
     , bench "effectful.shallow" $ nf catchEffectful x
     , bench "effectful.deep" $ nf catchEffectfulDeep x
@@ -59,7 +64,12 @@ main = defaultMain
     ]
   , bgroup "local" $ [10000] <&> \x -> bgroup (show x)
     [ bench "sp_modified_for_non_scoped_resumption_support.shallow" $ nf localSp x
-    , bench "sp_modified_for_non_scoped_resumption_support.deep" $ nf localSpDeep x
+    , bench "sp_modified_for_non_scoped_resumption_support.deep0" $ nf localSpDeep0 x
+    , bench "sp_modified_for_non_scoped_resumption_support.deep1" $ nf localSpDeep1 x
+    , bench "sp_modified_for_non_scoped_resumption_support.deep2" $ nf localSpDeep2 x
+    , bench "sp_modified_for_non_scoped_resumption_support.deep3" $ nf localSpDeep3 x
+    , bench "sp_modified_for_non_scoped_resumption_support.deep4" $ nf localSpDeep4 x
+    , bench "sp_modified_for_non_scoped_resumption_support.deep5" $ nf localSpDeep5 x
 #if SPEFF_BENCH_EFFECTFUL
     , bench "effectful.shallow" $ nf localEffectful x
     , bench "effectful.deep" $ nf localEffectfulDeep x

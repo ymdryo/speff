@@ -1,32 +1,34 @@
-module Sp.Reader
-  ( -- * Reader
-    Reader (..)
-  , ask
-  , local
-  , runReader
-  ) where
+module Sp.Reader where
 
-import           Data.Kind (Type)
 import           Sp.Eff
 
+
 -- | Provides an environment value of type @r@, and you can override it in a local scope.
-data Reader (r :: Type) :: Effect where
-  Ask :: Reader r m r
-  Local :: (r -> r) -> m a -> Reader r m a
+data Ask r :: EffectF where
+    Ask :: Ask r r
 
 -- | Obtain the environment value.
-ask :: Reader r :> es => Eff es r
+ask :: Ask r :> ef => Eff eh ef r
 ask = send Ask
 
+-- | Run the 'Ask' effect with an environment value.
+runAsk :: forall r eh ef a. HFunctors eh => r -> Eff eh (Ask r ': ef) a -> Eff eh ef a
+runAsk r = interpretRec0 \_ Ask -> pure r
+
+-- | Run the 'Ask' effect with an environment value.
+runAsk' :: forall r eh ef a. r -> Eff '[] (Ask r ': ef) a -> Eff eh ef a
+runAsk' r = interpret0 \_ Ask -> pure r
+
+data Local r :: EffectH where
+    Local :: (r -> r) -> m a -> Local r m a
+
 -- | Override the environment value in a local scope.
-local :: Reader r :> es => (r -> r) -> Eff es a -> Eff es a
-local f m = send (Local f m)
+local :: Local r :> eh => (r -> r) -> Eff eh ef a -> Eff eh ef a
+local f m = sendH (Local f m)
 
-handleReader :: r -> Handler (Reader r) es a
-handleReader !r _ = \case
-  Ask       -> pure r
-  Local f m -> replace (handleReader $ f r) m
+runLocal :: forall r eh ef a. (HFunctors eh, Ask r :> ef) => Eff (Local r ': eh) ef a -> Eff eh ef a
+runLocal = interpretRec0H \tag (Local f m) -> embedH tag $ interposeRec @(Ask r) (\tag' Ask -> f <$> embed tag' (send Ask)) m
 
--- | Run the 'Reader' effect with an environment value.
-runReader :: r -> Eff (Reader r : es) a -> Eff es a
-runReader r = interpret (handleReader r)
+instance HFunctor (Local r) where
+    hfmap phi (Local f m) = Local f (phi m)
+    {-# INLINE hfmap #-}

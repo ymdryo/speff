@@ -26,7 +26,7 @@ import qualified Sp.Eff                       as S
 import qualified Sp.Reader                    as S
 import qualified Sp.State                     as S
 
-programSp :: S.State Int S.:> es => S.Eff es Int
+programSp :: S.State Int S.:> ef => S.Eff eh ef Int
 programSp = do
   x <- S.get @Int
   if x == 0
@@ -37,11 +37,11 @@ programSp = do
 {-# NOINLINE programSp #-}
 
 countdownSp :: Int -> (Int, Int)
-countdownSp n = S.runEff $ S.runState n programSp
+countdownSp n = S.runEff $ S.runStateIO n programSp
 
 countdownSpDeep :: Int -> (Int, Int)
-countdownSpDeep n = S.runEff $ runR $ runR $ runR $ runR $ runR $ S.runState n $ runR $ runR $ runR $ runR $ runR $ programSp
-  where runR = S.runReader ()
+countdownSpDeep n = S.runEff $ runR $ runR $ runR $ runR $ runR $ S.runStateIO n $ runR $ runR $ runR $ runR $ runR $ programSp
+  where runR = S.runAsk ()
 
 #if SPEFF_BENCH_EFFECTFUL
 programEffectful :: EL.State Int EL.:> es => EL.Eff es Int

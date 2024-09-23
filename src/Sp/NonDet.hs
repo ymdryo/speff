@@ -1,36 +1,20 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
-module Sp.NonDet
-  ( -- * Nondeterminism
-    NonDet (..)
-  , choice
-  , runNonDet
-    -- Culling
-  , Cull (..)
-  , cull
-  , runCull
-    -- Cutting
-  , Cut (..)
-  , call
-  , cutfail
-  , cut
-  , runCut
-  ) where
+module Sp.NonDet where
 
 import           Control.Applicative (Alternative (empty, (<|>)))
 import           Debug.Trace
 import           Sp.Eff
 import           Sp.Error
 
--- | Provides nondeterministic choice.
-data NonDet :: Effect where
-  Empty :: NonDet m a
-  Choice :: [a] -> NonDet m a
+data NonDet :: EffectF where
+  Empty :: NonDet a
+  Choice :: [a] -> NonDet a
 
 -- | Nondeterministic choice.
-choice :: NonDet :> es => [a] -> Eff es a
+choice :: NonDet :> ef => [a] -> Eff eh ef a
 choice etc = send (Choice etc)
 
-handleNonDet :: Alternative f => Handler NonDet es (f a)
+handleNonDet :: Alternative f => Handler NonDet eh ef (f a)
 handleNonDet tag = \case
   Empty -> abort tag $ pure empty
   Choice etc -> control tag \cont ->
@@ -42,16 +26,17 @@ handleNonDet tag = \case
 {-# INLINABLE handleNonDet #-}
 
 -- | Run the 'NonDet' effect, with the nondeterministic choice provided by an 'Alternative' instance.
-runNonDet :: Alternative f => Eff (NonDet : es) a -> Eff es (f a)
+runNonDet :: Alternative f => Eff '[] (NonDet ': ef) a -> Eff eh ef (f a)
 runNonDet = interpret handleNonDet . fmap pure
 {-# INLINABLE runNonDet #-}
 
-instance NonDet :> es => Alternative (Eff es) where
+instance NonDet :> ef => Alternative (Eff eh ef) where
   empty = send Empty
   m <|> n = do
     x <- send (Choice [True, False])
     if x then m else n
 
+{-
 data Cull :: Effect where
   Cull :: NonDet :> esSend => Eff esSend a -> Cull (Eff esSend) a
 
@@ -107,3 +92,4 @@ runCut m = do
   case err of
     Left (CutBail xs) -> choice xs
     Right a           -> pure a
+-}

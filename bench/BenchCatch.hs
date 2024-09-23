@@ -16,18 +16,50 @@ import qualified Sp.Eff                       as S
 import qualified Sp.Error                     as S
 import qualified Sp.Reader                    as S
 
-programSp :: S.Error () S.:> es => Int -> S.Eff es a
+programSp :: (S.Throw () S.:> ef, S.Try () S.:> eh) => Int -> S.Eff eh ef a
 programSp = \case
-  0 -> S.throwError ()
-  n -> S.catchError (programSp (n - 1)) \() -> S.throwError ()
+  0 -> S.throw ()
+  n -> S.catch (programSp (n - 1)) \() -> S.throw ()
 {-# NOINLINE programSp #-}
 
 catchSp :: Int -> Either () ()
-catchSp n = S.runEff $ S.runError $ programSp n
+catchSp n = S.runEff $ S.runThrow $ S.runTry @() $ programSp n
 
-catchSpDeep :: Int -> Either () ()
-catchSpDeep n = S.runEff $ run $ run $ run $ run $ run $ S.runError $ run $ run $ run $ run $ run $ programSp n
-  where run = S.runReader ()
+catchSpDeep0 :: Int -> Either () ()
+catchSpDeep0 n = S.runEff $ run $ run $ run $ run $ run $ S.runThrow $ run $ run $ run $ run $ run $ S.runTry @() $ programSp n
+  where
+    run :: S.HFunctors eh => S.Eff eh (S.Ask () ': ef) a -> S.Eff eh ef a
+    run = S.runAsk ()
+
+catchSpDeep1 :: Int -> Either () ()
+catchSpDeep1 n = S.runEff $ run $ run $ run $ run $ run $ S.runThrow $ run $ run $ run $ run $ S.runTry @() $ run $ programSp n
+  where
+    run :: S.HFunctors eh => S.Eff eh (S.Ask () ': ef) a -> S.Eff eh ef a
+    run = S.runAsk ()
+
+catchSpDeep2 :: Int -> Either () ()
+catchSpDeep2 n = S.runEff $ run $ run $ run $ run $ run $ S.runThrow $ run $ run $ run $ S.runTry @() $ run $ run $ programSp n
+  where
+    run :: S.HFunctors eh => S.Eff eh (S.Ask () ': ef) a -> S.Eff eh ef a
+    run = S.runAsk ()
+
+catchSpDeep3 :: Int -> Either () ()
+catchSpDeep3 n = S.runEff $ run $ run $ run $ run $ run $ S.runThrow $ run $ run $ S.runTry @() $ run $ run $ run $ programSp n
+  where
+    run :: S.HFunctors eh => S.Eff eh (S.Ask () ': ef) a -> S.Eff eh ef a
+    run = S.runAsk ()
+
+catchSpDeep4 :: Int -> Either () ()
+catchSpDeep4 n = S.runEff $ run $ run $ run $ run $ run $ S.runThrow $ run $ S.runTry @() $ run $ run $ run $ run $ programSp n
+  where
+    run :: S.HFunctors eh => S.Eff eh (S.Ask () ': ef) a -> S.Eff eh ef a
+    run = S.runAsk ()
+
+catchSpDeep5 :: Int -> Either () ()
+catchSpDeep5 n = S.runEff $ run $ run $ run $ run $ run $ S.runThrow $ S.runTry @() $ run $ run $ run $ run $ run $ programSp n
+  where
+    run :: S.HFunctors eh => S.Eff eh (S.Ask () ': ef) a -> S.Eff eh ef a
+    run = S.runAsk ()
 
 #if SPEFF_BENCH_EFFECTFUL
 programEffectful :: EL.Error () EL.:> es => Int -> EL.Eff es a

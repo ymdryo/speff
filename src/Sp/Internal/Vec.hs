@@ -119,6 +119,7 @@ mapFoldr folder (Vec off len arr) = Vec off len $ runArray do
         )
         (\_ -> pure marr)
         (-off)
+{-# INLINE mapFoldr #-}
 
 
 -- | Get a known subset of the vector. \( O(m) \).

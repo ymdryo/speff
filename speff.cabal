@@ -85,15 +85,15 @@ library
   ghc-options:     -fdicts-strict -flate-dmd-anal -fspec-constr
   exposed-modules:
     Sp.Eff
-    -- Sp.Error
     Sp.Internal.Env
     Sp.Internal.Monad
     Sp.Internal.FTCQueue
-    -- Sp.NonDet
-    -- Sp.Reader
-   --  Sp.State
-    -- Sp.Writer
-    -- Sp.Coroutine
+    Sp.Error
+    Sp.NonDet
+    Sp.Reader
+    Sp.State
+    Sp.Writer
+    Sp.Coroutine
     Sp.Test
 
   other-modules:

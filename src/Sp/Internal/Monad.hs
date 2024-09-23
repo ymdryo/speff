@@ -202,6 +202,7 @@ hfmapEnv mapH mapF f =
             . mapH
         )
         mapF
+{-# INLINE hfmapEnv #-}
 
 alterEnv ::
     (Rec (InternalElaborator eh' ef') eh' -> Rec (InternalElaborator eh ef) eh) ->

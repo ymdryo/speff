@@ -1,37 +1,43 @@
-module Sp.Error
-  ( -- * Error
-    Error (..)
-  , throwError
-  , tryError
-  , catchError
-  , runError
-  ) where
+module Sp.Error where
 
 import           Data.Kind (Type)
 import           Sp.Eff
+import Control.Exception (throwIO, Exception)
 
 -- | Allows you to throw error values of type @e@ and catching these errors too.
-data Error (e :: Type) :: Effect where
-  ThrowError :: e -> Error e m a
-  TryError :: m a -> Error e m (Either e a)
+data Throw (e :: Type) :: EffectF where
+  Throw :: e -> Throw e a
+
+data Try (e :: Type) :: EffectH where
+  Try :: m a -> Try e m (Either e a)
+
+instance HFunctor (Try e) where
+    hfmap f (Try m) = Try $ f m
+    {-# INLINE hfmap #-}
 
 -- | Throw an error.
-throwError :: Error e :> es => e -> Eff es a
-throwError e = send (ThrowError e)
+throw :: Throw e :> ef => e -> Eff eh ef a
+throw e = send (Throw e)
 
 -- | Catch any error thrown by a computation and return the result as an 'Either'.
-tryError :: Error e :> es => Eff es a -> Eff es (Either e a)
-tryError m = send (TryError m)
+try :: Try e :> eh => Eff eh ef a -> Eff eh ef (Either e a)
+try m = sendH (Try m)
 
 -- | Catch any error thrown by a computation and handle it with a function.
-catchError :: Error e :> es => Eff es a -> (e -> Eff es a) -> Eff es a
-catchError m h = tryError m >>= either h pure
+catch :: Try e :> eh => Eff eh ef a -> (e -> Eff eh ef a) -> Eff eh ef a
+catch m h = try m >>= either h pure
 
-handleError :: ∀ e es a. Handler (Error e) es (Either e a)
-handleError tag = \case
-  ThrowError e -> abort tag (pure $ Left e)
-  TryError m   -> replace (handleError @e) (Right <$> m)
+handleThrow :: ∀ e eh ef a. Handler (Throw e) eh ef (Either e a)
+handleThrow tag = \case
+  Throw e -> abort tag (pure $ Left e)
 
--- | Run the 'Error' effect. If there is any unhandled error, it is returned as a 'Left'.
-runError :: ∀ e es a. Eff (Error e : es) a -> Eff es (Either e a)
-runError = interpret (handleError @e) . fmap Right
+elabTry :: forall e ef a. (Throw e :> ef) => Elaborator (Try e) '[] ef a
+elabTry tag = \case
+  Try m -> embedH tag $ interpose (handleThrow @e) (Right <$> m)
+
+runThrow :: ∀ e eh ef a. Eff '[] (Throw e ': ef) a -> Eff eh ef (Either e a)
+runThrow = interpret (handleThrow @e) . fmap Right
+
+runTry :: ∀ e ef a. Throw e :> ef => Eff '[Try e] ef a -> Eff '[] ef a
+runTry = interpretRecH (elabTry @e)
+

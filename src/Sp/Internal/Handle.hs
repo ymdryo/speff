@@ -27,11 +27,9 @@ type InterpretRecH eh' = ∀ e eh ef a. (HFunctors eh, HFunctor e) => (forall x.
 
 -- | Interpret and add extra effects based on type inference. If this does not work consider using the more concrete
 -- functions below.
-interpret,interpret' :: Suffix ef ef' => Handler e eh ef' a -> Eff '[] (e ': ef) a -> Eff eh ef' a
+interpret :: Suffix ef ef' => Handler e eh ef' a -> Eff '[] (e ': ef) a -> Eff eh ef' a
 interpret = handle \ih -> alterEnvF (Rec.cons ih . Rec.suffix)
 {-# INLINE interpret #-}
-interpret' = interpret
-{-# NOINLINE interpret' #-}
 
 -- | Interpret and don't add extra effects.
 interpret0 :: Interpret '[]
@@ -39,11 +37,9 @@ interpret0 = interpret
 {-# INLINE interpret0 #-}
 
 -- | Interpret and add a list of extra effects specified explicitly via @TypeApplications@.
-interpretN, interpretN' :: ∀ es'. KnownList es' => Interpret es'
+interpretN :: ∀ es'. KnownList es' => Interpret es'
 interpretN = handle \ih -> alterEnvF (Rec.cons ih . Rec.drop @es')
 {-# INLINE interpretN #-}
-interpretN' = interpretN @es'
-{-# NOINLINE interpretN' #-}
 
 -- | Interpret and add extra effects based on type inference. If this does not work consider using the more concrete
 -- functions below.
@@ -98,11 +94,9 @@ type InterposeRecH eh' = ∀ e eh ef a. (e :> eh, HFunctors eh) => (forall x. El
 
 -- | Interpose and add extra effects based on type inference. If this does not work consider using the more concrete
 -- functions below.
-interpose,interpose' :: (e :> ef, Suffix ef ef') => Handler e eh ef' a -> Eff '[] ef a -> Eff eh ef' a
+interpose :: (e :> ef, Suffix ef ef') => Handler e eh ef' a -> Eff '[] ef a -> Eff eh ef' a
 interpose = handle \ie -> alterEnvF $ Rec.update ie . Rec.suffix
 {-# INLINE interpose #-}
-interpose' = interpose
-{-# NOINLINE interpose' #-}
 
 -- | Interpose and don't add extra effects.
 interpose0 :: Interpose '[]
@@ -110,11 +104,9 @@ interpose0 = interpose
 {-# INLINE interpose0 #-}
 
 -- | Interpose and add a list of extra effects specified explicitly via @TypeApplications@.
-interposeN,interposeN' :: ∀ es'. KnownList es' => Interpose es'
+interposeN :: ∀ es'. KnownList es' => Interpose es'
 interposeN = handle \ie -> alterEnvF $ Rec.update ie . Rec.drop @es'
 {-# INLINE interposeN #-}
-interposeN' = interposeN @es'
-{-# NOINLINE interposeN' #-}
 
 -- | Interpose and add extra effects based on type inference. If this does not work consider using the more concrete
 -- functions below.

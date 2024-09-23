@@ -11,12 +11,12 @@ import qualified Control.Mp.Util as M
 import Control.Monad (forM)
 import qualified Control.Effect as E
 
-programSp :: S.Yield Int Int S.:> es => Int -> S.Eff es [Int]
+programSp :: S.Yield Int Int S.:> ef => Int -> S.Eff eh ef [Int]
 programSp upbound =
     forM [1..upbound] \i -> S.yield i
 {-# NOINLINE programSp #-}
 
-loopStatusSp :: S.Status es Int Int r -> S.Eff es r
+loopStatusSp :: S.Status (S.Eff eh ef) Int Int r -> S.Eff eh ef r
 loopStatusSp = \case
     S.Done r -> pure r
     S.Continue i f -> loopStatusSp =<< f (i+100)
@@ -27,7 +27,7 @@ coroutineSp n = S.runEff $ loopStatusSp =<< S.runCoroutine (programSp n)
 
 coroutineSpDeep :: Int -> [Int]
 coroutineSpDeep n = S.runEff $ run $ run $ run $ run $ run $ loopStatusSp =<< S.runCoroutine (run $ run $ run $ run $ run $ programSp n)
-  where run = S.runReader ()
+  where run = S.runAsk ()
 
 
 programMp :: M.Yield Int Int M.:? e => Int -> M.Eff e [Int]
