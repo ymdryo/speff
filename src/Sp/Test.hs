@@ -1,11 +1,12 @@
 module Sp.Test where
 
-import Control.Monad.IO.Class (liftIO)
 import Sp.Eff
-import Sp.Internal.Monad (unsafeIO)
+import Control.Monad.IO.Class (liftIO)
 
 {-
 
+-- rather `effTest`.
+-- coroutine semantics test for `eff`.
 spTest :: IO ()
 spTest = runIOE do
     stat <- runCoroutine @Int @Int do

@@ -32,6 +32,7 @@ common lang
     , exceptions  ^>=0.10
     , primitive   >=0.8   && <0.10
     , constraints
+    , eff
 
   ghc-options:
     -Wall -Widentities -Wincomplete-record-updates
@@ -87,10 +88,12 @@ library
     -- Sp.Error
     Sp.Internal.Env
     Sp.Internal.Monad
+    Sp.Internal.FTCQueue
     -- Sp.NonDet
     -- Sp.Reader
    --  Sp.State
     -- Sp.Writer
+    -- Sp.Coroutine
     Sp.Test
 
   other-modules:
@@ -110,6 +113,8 @@ benchmark speff-bench
     , mtl            >=2.2  && <2.4
     , polysemy       ^>=1.9
     , speff
+    , mpeff
+    , eff
     , tasty-bench    ^>=0.3
 
   cpp-options:    -DSPEFF_BENCH_FREER_SIMPLE
@@ -123,6 +128,7 @@ benchmark speff-bench
     BenchCountdown
     BenchLocal
     BenchPyth
+    BenchCoroutine
 
 executable Main
     import: lang

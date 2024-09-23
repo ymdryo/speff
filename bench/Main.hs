@@ -5,6 +5,7 @@ import           BenchCatch
 import           BenchCountdown
 import           BenchLocal
 import           BenchPyth
+import           BenchCoroutine
 import           Data.Functor     ((<&>))
 import           Test.Tasty.Bench
 
@@ -67,5 +68,15 @@ main = defaultMain
     , bench "fused.deep" $ nf localFusedDeep x
     , bench "sem.shallow" $ nf localSem x
     , bench "sem.deep" $ nf localSemDeep x
+    ]
+  , bgroup "coroutine" $ [10000] <&> \x -> bgroup (show x)
+    [ bench "sp_modified_for_non_scoped_resumption_support.shallow" $ nf coroutineSp x
+    , bench "sp_modified_for_non_scoped_resumption_support.deep" $ nf coroutineSpDeep x
+    , bench "mp.shallow" $ nf coroutineMp x
+    , bench "mp.deep" $ nf coroutineMpDeep x
+    , bench "freer.shallow" $ nf coroutineFreer x
+    , bench "freer.deep" $ nf coroutineFreerDeep x
+    , bench "eff.shallow" $ nf coroutineEff x
+    , bench "eff.deep" $ nf coroutineEffDeep x
     ]
   ]
