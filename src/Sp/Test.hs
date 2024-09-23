@@ -3,16 +3,14 @@ module Sp.Test where
 import Sp.Eff
 import Control.Monad.IO.Class (liftIO)
 
-{-
-
 -- rather `effTest`.
 -- coroutine semantics test for `eff`.
-spTest :: IO ()
-spTest = runIOE do
+coroutine :: IO ()
+coroutine = runIOE do
     stat <- runCoroutine @Int @Int do
-        r <- sendH $ Yield @Int @Int 0
+        r <- send $ Yield @Int @Int 0
         unsafeIO $ putStrLn $ "reply: " <> show r
-        _ <- sendH $ Yield @Int @Int 100
+        _ <- send $ Yield @Int @Int 100
         pure ()
 
     case stat of
@@ -24,7 +22,6 @@ spTest = runIOE do
                 Done () -> liftIO $ putStrLn "Done."
                 Coroutine n' _ -> liftIO $ putStrLn $ "Continue... " <> show n'
             pure ()
--}
 
 data Ask r :: EffectF where
     Ask :: Ask r r
@@ -79,6 +76,9 @@ spTest = do
 
     putStrLn "[Recursive-Reset Interpretation]"
     spTestRec
+
+    putStrLn "[coroutine]"
+    coroutine
 
 spTestOk :: IO ()
 spTestOk = runIOE . runAsk @Int 0 . runState "A" . runLocal @Int $ do
