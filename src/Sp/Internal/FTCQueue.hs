@@ -1,3 +1,5 @@
+-- from: https://hackage.haskell.org/package/freer-simple-1.2.1.2/docs/Data-FTCQueue.html
+-- BSD3 license, (c) 2016 Allele Dev; 2017 Ixperta Solutions s.r.o.; 2017 Alexis King
 module Sp.Internal.FTCQueue where
 
 -- | Non-empty tree. Deconstruction operations make it more and more
