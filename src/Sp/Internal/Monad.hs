@@ -173,19 +173,20 @@ alterFQ f q = case tviewl q of
     k :| kk -> \x -> alter f (k x) >>= alterFQ f kk
 {-# NOINLINE alterFQ #-}
 
-alterRec ::
-    HFunctors eh =>
-    (Rec (InternalElaborator eh' ef') eh' -> Rec (InternalElaborator eh' ef') eh) ->
+alterEnvF ::
     (Rec InternalHandler ef' -> Rec InternalHandler ef) ->
-    Eff eh ef a -> Eff eh' ef' a
-alterRec mapH mapF = alter $ alterEnvRec mapH mapF
+    Env eh ef' -> Env '[] ef
+alterEnvF f = alterEnv (const Rec.empty) f
+{-# INLINE alterEnvF #-}
 
-alterEnvRec ::
+alterRecHF ::
     HFunctors eh =>
     (Rec (InternalElaborator eh' ef') eh' -> Rec (InternalElaborator eh' ef') eh) ->
     (Rec InternalHandler ef' -> Rec InternalHandler ef) ->
-    Env eh' ef' -> Env eh ef
-alterEnvRec mapH mapF = hfmapEnv mapH mapF $ alterRec mapH mapF
+    (forall x. Eff eh ef x -> Eff eh' ef' x) ->
+    Eff eh ef a -> Eff eh' ef' a
+alterRecHF mapH mapF f = alter $ hfmapEnv mapH mapF f
+{-# INLINE alterRecHF #-}
 
 hfmapEnv ::
     HFunctors eh =>
@@ -209,6 +210,16 @@ alterEnv ::
 alterEnv mapH mapF = \(Env eh ef) -> Env (mapH eh) (mapF ef)
 {-# INLINE alterEnv #-}
 
+alterRec,alterRec' ::
+    HFunctors eh =>
+    (Rec (InternalElaborator eh' ef') eh' -> Rec (InternalElaborator eh' ef') eh) ->
+    (Rec InternalHandler ef' -> Rec InternalHandler ef) ->
+    Eff eh ef a -> Eff eh' ef' a
+alterRec mapH mapF = alterRecHF mapH mapF $ alterRec' mapH mapF
+alterRec' = alterRec
+{-# INLINE alterRec #-}
+{-# NOINLINE alterRec' #-}
+
 class HFunctor h where
     hfmap :: (forall x. f x -> g x) -> h f a -> h g a
 
@@ -223,13 +234,13 @@ handle f = \hdl m -> do
   prompt (\es' -> f (toInternalHandler mark es' hdl) es') mark m
 {-# INLINE handle #-}
 
--- | General effect handling. Introduce a prompt frame, convert the supplied handler to an internal one wrt that
--- frame, and then supply the internal handler to the given function to let it add that to the effect context.
-handleH :: (InternalElaborator eh' ef' e -> Env eh' ef' -> Env eh ef) -> Elaborator e eh' ef' a -> Eff eh ef a -> Eff eh' ef' a
-handleH f = \elb m -> do
+-- | General effect elaborating. Introduce a prompt frame, convert the supplied elaborator to an internal one wrt that
+-- frame, and then supply the internal elaborator to the given function to let it add that to the effect context.
+elaborate :: (InternalElaborator eh' ef' e -> Env eh' ef' -> Env eh ef) -> Elaborator e eh' ef' a -> Eff eh ef a -> Eff eh' ef' a
+elaborate f = \elb m -> do
   mark <- freshMarker
   prompt (\es' -> f (toInternalElaborator mark es' elb) es') mark m
-{-# INLINE handleH #-}
+{-# INLINE elaborate #-}
 
 -- | Perform an effect operation.
 send :: e :> ef => e a -> Eff eh ef a
