@@ -201,22 +201,22 @@ lift1 :: Lift '[e']
 lift1 = lift
 {-# INLINE lift1 #-}
 
-{-
 -- | The family of /lifting/ functions. They trivially lift a computation over some effects into a larger effect
 -- context. It can be also seen as masking a set of effects from the inner computation.
-type Lift es' = ∀ es ef a. HFunctors es => Eff es ef a -> Eff (es' ++ es) ef a
+type LiftH es' = ∀ es ef a. HFunctors es => Eff es ef a -> Eff (es' ++ es) ef a
 
 -- | Lift over some effects based on type inference. If this does not work consider using the more concrete functions
 -- below.
-lift :: (Suffix es es', HFunctors es) => Eff es ef a -> Eff es' ef a
-lift = alterRec Rec.suffix id
-{-# INLINE lift #-}
+liftH :: (Suffix es es', HFunctors es) => Eff es ef a -> Eff es' ef a
+liftH = alterRec Rec.suffix id
+{-# INLINE liftH #-}
 
 -- | Lift over 1 effect.
-lift1 :: Lift '[e']
-lift1 = lift
-{-# INLINE lift1 #-}
+lift1H :: LiftH '[e']
+lift1H = liftH
+{-# INLINE lift1H #-}
 
+{-
 -- | Lift over 2 effects.
 lift2 :: Lift '[e', e'']
 lift2 = lift
@@ -251,21 +251,21 @@ lift1Under1 :: LiftNUnder '[e']
 lift1Under1 = liftUnder1
 {-# INLINE lift1Under1 #-}
 
-{-
 -- | The family of /lifting-under-1/ functions. They lift over several effects /under/ one effect.
-type LiftNUnder es' = ∀ e es ef a. (HFunctors es, HFunctor e) => Eff (e : es) ef a -> Eff (e : es' ++ es) ef a
+type LiftNUnderH es' = ∀ e es ef a. (HFunctors es, HFunctor e) => Eff (e : es) ef a -> Eff (e : es' ++ es) ef a
 
 -- | Lift over several effect under 1 effect, based on type inference. If this does not work consider using the more
 -- concrete functions below.
-liftUnder1 :: (Suffix es es', HFunctor e, HFunctors es) => Eff (e : es) ef a -> Eff (e : es') ef a
-liftUnder1 = alterRec (\es -> Rec.cons (Rec.head es) $ Rec.suffix es) id
-{-# INLINE liftUnder1 #-}
+liftUnder1H :: (Suffix es es', HFunctor e, HFunctors es) => Eff (e : es) ef a -> Eff (e : es') ef a
+liftUnder1H = alterRec (\es -> Rec.cons (Rec.head es) $ Rec.suffix es) id
+{-# INLINE liftUnder1H #-}
 
 -- | Lift over 1 effect under 1 effect.
-lift1Under1 :: LiftNUnder '[e']
-lift1Under1 = liftUnder1
-{-# INLINE lift1Under1 #-}
+lift1Under1H :: LiftNUnderH '[e']
+lift1Under1H = liftUnder1H
+{-# INLINE lift1Under1H #-}
 
+{-
 -- | Lift over 2 effects under 1 effect.
 lift2Under1 :: LiftNUnder '[e', e'']
 lift2Under1 = liftUnder1

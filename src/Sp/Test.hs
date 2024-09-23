@@ -26,42 +26,38 @@ spTest = runIOE do
             pure ()
 -}
 
-data Ask r :: EffectF where
-    Ask :: Ask r r
+data Ask r :: EffectH where
+    Ask :: Ask r m r
 
-{-
 instance HFunctor (Ask r) where
     hfmap _ Ask = Ask
--}
 
-runAsk :: HFunctors es => r -> Eff es (Ask r ': ef) a -> Eff es ef a
-runAsk r = interpret0 \_ Ask -> pure r
+runAsk :: forall r es ef a. HFunctors es => r -> Eff (Ask r ': es) ef a -> Eff es ef a
+runAsk r = interpret0H \_ Ask -> pure r
 
 data Local r :: EffectH where
     Local :: (r -> r) -> m a -> Local r m a
 
-runLocal :: forall r es ef a. (HFunctors es, Ask r :> ef) => Eff (Local r ': es) ef a -> Eff es ef a
-runLocal = interpret0H \tag (Local f m) -> embedH tag $ interpose0 @(Ask r) (\tag' Ask -> f <$> embed tag' (send Ask)) m
+runLocal :: forall r es ef a. (HFunctors es, Ask r :> es) => Eff (Local r ': es) ef a -> Eff es ef a
+runLocal = interpret0H \tag (Local f m) -> embedH tag $ replace0H @(Ask r) (\tag' Ask -> f <$> embedH tag' (sendH Ask)) m
 
 instance HFunctor (Local r) where
     hfmap phi (Local f m) = Local f (phi m)
 
-data State s :: EffectF where
-    Get :: State s s
-    Put :: s -> State s ()
+data State s :: EffectH where
+    Get :: State s m s
+    Put :: s -> State s m ()
 
-{-
 instance HFunctor (State s) where
     hfmap _ = \case
         Get -> Get
         Put s -> Put s
--}
 
-runState :: HFunctors eh => s -> Eff eh (State s ': ef) a -> Eff eh ef a
-runState s m = runAsk s . interpret0 (\tag -> \case
-        Get -> embed tag $ send Ask
-        Put s' -> control tag \k -> lift1 $ runAsk s' $ k $ pure ()
-    ) $ lift1Under1 m
+runState :: HFunctors eh => s -> Eff (State s ': eh) ef a -> Eff eh ef a
+runState s m = runAsk s . interpret0H (\tag -> \case
+        Get -> embedH tag $ sendH Ask
+        Put s' -> control tag \k -> lift1H $ runAsk s' $ k $ pure ()
+    ) $ lift1Under1H m
 
 data Throw e :: EffectH where
     Throw :: e -> Throw e m a
@@ -87,9 +83,29 @@ runCoroutine :: forall a b es ef r. HFunctors es => Eff (Yield a b ': es) ef r -
 runCoroutine m = do
     interpret0H (\tag (Yield a) -> control tag \k -> pure $ Coroutine a (k . pure)) $ Done <$> m
 
-
 spTest :: IO ()
-spTest = runIOE . runState "A" $ do
-    s0 :: String <- send Get
-    send $ Put $ s0 <> "B"
-    liftIO . print @String =<< send Get
+spTest = do
+    putStrLn "[OK case]"
+    spTestOk
+
+    putStrLn "[NG case]"
+    spTestRuntimeError
+
+spTestOk :: IO ()
+spTestOk = runIOE . runAsk @Int 0 . runState "A" . runLocal @Int $ do
+    s0 :: String <- sendH Get
+    sendH $ Local @Int id do
+        sendH $ Put $ s0 <> "B"
+    liftIO . print @String =<< sendH Get
+
+-- Runtime Error: "Sp.Internal.Vec: uninitialized element"
+--
+-- This is an expected result (a general principle from Hefty Algebra/Heftia): Without relying on "reset-based"
+-- recursive interpretation via `HFunctor`, it is not possible to interpret first-order effects before higher-order
+-- effects. We cannot maintain continuational state beyond a scope of uninterpreted higher-order effects.
+spTestRuntimeError :: IO ()
+spTestRuntimeError = runIOE . runAsk @Int 0 . runLocal @Int . runState "A" $ do
+    s0 :: String <- sendH Get
+    sendH $ Local @Int id do
+        sendH $ Put $ s0 <> "B"
+    liftIO . print @String =<< sendH Get
