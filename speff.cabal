@@ -87,6 +87,7 @@ library
     Sp.Error
     Sp.Internal.Env
     Sp.Internal.Monad
+    Sp.Internal.FTCQueue
     Sp.NonDet
     Sp.Reader
     Sp.State

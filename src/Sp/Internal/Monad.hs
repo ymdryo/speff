@@ -10,7 +10,7 @@
 -- The effect monad, along with handling combinators that enable delimited control and higher-order effects.
 module Sp.Internal.Monad where
 
-import           Control.Monad          (ap, liftM, (<=<))
+import           Control.Monad          (ap, liftM, (<=<), (>=>))
 import           Control.Monad.IO.Class (MonadIO (liftIO))
 import           Data.Kind              (Type)
 import qualified Sp.Internal.Env        as Rec
@@ -21,6 +21,7 @@ import           Data.Type.Equality     (type (:~:) (Refl))
 import           GHC.Exts               (RealWorld)
 import           Unsafe.Coerce          (unsafeCoerce)
 import Data.Functor ((<&>))
+import Sp.Internal.FTCQueue
 
 -- | The source from which we construct unique 'Marker's.
 uniqueSource :: PrimVar RealWorld Int
@@ -42,17 +43,17 @@ eqMarker (Marker l) (Marker r) =
   if l == r then Just (unsafeCoerce Refl, unsafeCoerce Refl) else Nothing
 
 -- | Intermediate result of a `Ctl` computation.
-type role Result nominal representational
+type role Result nominal nominal
 data Result es (a :: Type)
   = Pure a
   -- ^ The computation returned normally.
   | ∀ (r :: Type) e es'. Abort !(Marker e es' r) (Ctl es' r)
   -- ^ The computation replaced itself with another computation.
-  | ∀ (r :: Type) e es' (b :: Type). Control !(Marker e es' r) ((b -> Eff es' r) -> Eff es' r) (b -> Eff es a)
+  | ∀ (r :: Type) e es' (b :: Type). Control !(Marker e es' r) ((b -> Eff es' r) -> Eff es' r) (FTCQueue (Eff es) b a)
   -- ^ The computation captured a resumption and gained control over it. Specifically, this uses @shift0@ semantics.
 
 -- | The delimited control monad, with efficient support of tail-resumptive computations.
-type role Ctl nominal representational
+type role Ctl nominal nominal
 newtype Ctl es (a :: Type) = Ctl { unCtl :: IO (Result es a) }
 
 -- | Install a prompt frame.
@@ -63,8 +64,8 @@ prompt f !mark (Eff m) = Eff \es -> Ctl $ unCtl (m $ f es) >>= \case
     Just (Refl,Refl) -> unCtl r
     Nothing   -> pure $ Abort mark' r
   Control mark' ctl cont -> case eqMarker mark mark' of
-    Just (Refl,Refl) -> unCtl $ unEff (ctl (prompt' f mark . cont)) es
-    Nothing   -> pure $ Control mark' ctl (prompt' f mark . cont)
+    Just (Refl,Refl) -> unCtl $ unEff (ctl (prompt' f mark . qApp cont)) es
+    Nothing   -> pure $ Control mark' ctl (tsingleton $ prompt' f mark . qApp cont)
 {-# INLINE prompt #-}
 prompt' = prompt
 {-# NOINLINE prompt' #-}
@@ -89,7 +90,7 @@ newtype HandlerCell (e :: Effect) = HandlerCell { getHandlerCell :: InternalHand
 -- | The effect monad; it is parameterized by the /effect context/, i.e. a row of effects available. This monad is
 -- implemented with evidence passing and a delimited control monad with support of efficient tail-resumptive
 -- (non-capturing) computations and @IO@ embedding.
-type role Eff nominal representational
+type role Eff nominal nominal
 newtype Eff (es :: [Effect]) (a :: Type) = Eff { unEff :: Env es -> Ctl es a }
 
 -- | The internal representation of a handler of effect @e@. This representation is only valid within the original
@@ -115,13 +116,8 @@ instance Monad (Eff es) where
   Eff m >>= f = Eff \es -> Ctl $ unCtl (m es) >>= \case
     Pure a                -> unCtl (unEff (f a) es)
     Abort mark r          -> pure $ Abort mark r
-    Control mark ctl cont -> pure $ Control mark ctl (f `compose` cont)
+    Control mark ctl cont -> pure $ Control mark ctl (cont |> f)
   {-# INLINE (>>=) #-}
-
--- | This loopbreaker is crucial to the performance of the monad.
-compose :: (b -> Eff es c) -> (a -> Eff es b) -> a -> Eff es c
-compose = (<=<)
-{-# NOINLINE compose #-}
 
 -- | The tag associated to a handler that was /introduced/ in context @es@ over an computation with
 -- /eventual result type/ @r@. Value of this type enables delimited control and scoped effects.
@@ -152,8 +148,14 @@ alterCtl :: (Env es' -> Env es) -> Ctl es a -> Ctl es' a
 alterCtl f = \(Ctl m) -> Ctl $ m <&> \case
     Pure x -> Pure x
     Abort mark m' -> Abort mark m'
-    Control mark ctl k -> Control mark ctl \b -> alter f (k b)
-{-# NOINLINE alterCtl #-}
+    Control mark ctl k -> Control mark ctl (tsingleton $ alterFQ f k)
+{-# INLINE alterCtl #-}
+
+alterFQ :: (Env es' -> Env es) -> FTCQueue (Eff es) a b -> a -> Eff es' b
+alterFQ f q = case tviewl q of
+    TOne k -> \x -> alter f (k x)
+    k :| kk -> \x -> alter f (k x) >>= alterFQ f kk
+{-# NOINLINE alterFQ #-}
 
 -- | General effect handling. Introduce a prompt frame, convert the supplied handler to an internal one wrt that
 -- frame, and then supply the internal handler to the given function to let it add that to the effect context.
@@ -176,12 +178,20 @@ embed :: forall e es esSend r a. e :> esSend => HandleTag e es r -> Eff es a -> 
 embed (HandleTag es !mark) = under @e mark es
 {-# INLINE embed #-}
 
+qApp :: FTCQueue (Eff es) a b -> a -> Eff es b
+qApp q' x = Eff \es -> case tviewl q' of
+  TOne k  -> unEff (k x) es
+  k :| t -> Ctl $ unCtl (unEff (k x) es) >>= \case
+    Pure r -> unCtl $ unEff (qApp t r) es
+    Abort mark m -> pure $ Abort mark m
+    Control mark ctl k' -> pure $ Control mark ctl $ k' >< t
+
 under :: forall e es es' ans b. (e :> es) => Marker e es' ans -> Env es' -> Eff es' b -> Eff es b
 under !mark evv (Eff m) = Eff \_ ->
     Ctl $ unCtl (m $! evv) <&> \case
         Pure x -> Pure x
         Abort mark' m' -> Abort mark' m'
-        Control mark' ctl k -> Control mark' ctl $ resumeUnder @e mark k
+        Control mark' ctl k -> Control mark' ctl $ tsingleton $ resumeUnder @e mark $ qApp k
 {-# INLINE under #-}
 
 resumeUnder :: forall e es es' ans a b. (e :> es) => Marker e es' ans -> (b -> Eff es' a) -> (b -> Eff es a)
@@ -205,7 +215,7 @@ control
   -> ((Eff esSend a -> Eff es r) -> Eff es r)
   -> Eff esSend a
 control (HandleTag _ mark) f =
-  Eff \_ -> Ctl $ pure $ Control mark (\cont -> f cont) id
+  Eff \_ -> Ctl $ pure $ Control mark (\cont -> f cont) (tsingleton id)
 {-# INLINE control #-}
 
 -- | Unwrap the 'Eff' monad.
