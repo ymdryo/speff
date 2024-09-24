@@ -25,37 +25,37 @@ localSp n = S.runEff $ S.runAsk @Int 0 $ S.runLocal @Int $ programSp n
 localSpDeep0 :: Int -> Int
 localSpDeep0 n = S.runEff $ run $ run $ run $ run $ run $ S.runAsk @Int 0 $ run $ run $ run $ run $ run $ S.runLocal @Int $ programSp n
   where
-    run :: S.HFunctors eh => S.Eff eh (S.Ask () ': ef) a -> S.Eff eh ef a
+    run :: S.Eff eh (S.Ask () ': ef) a -> S.Eff eh ef a
     run = S.runAsk ()
 
 localSpDeep1 :: Int -> Int
 localSpDeep1 n = S.runEff $ run $ run $ run $ run $ run $ S.runAsk @Int 0 $ run $ run $ run $ run $ S.runLocal @Int $ run $ programSp n
   where
-    run :: S.HFunctors eh => S.Eff eh (S.Ask () ': ef) a -> S.Eff eh ef a
+    run :: S.Eff eh (S.Ask () ': ef) a -> S.Eff eh ef a
     run = S.runAsk ()
 
 localSpDeep2 :: Int -> Int
 localSpDeep2 n = S.runEff $ run $ run $ run $ run $ run $ S.runAsk @Int 0 $ run $ run $ run $ S.runLocal @Int $ run $ run $ programSp n
   where
-    run :: S.HFunctors eh => S.Eff eh (S.Ask () ': ef) a -> S.Eff eh ef a
+    run :: S.Eff eh (S.Ask () ': ef) a -> S.Eff eh ef a
     run = S.runAsk ()
 
 localSpDeep3 :: Int -> Int
 localSpDeep3 n = S.runEff $ run $ run $ run $ run $ run $ S.runAsk @Int 0 $ run $ run $ S.runLocal @Int $ run $ run $ run $ programSp n
   where
-    run :: S.HFunctors eh => S.Eff eh (S.Ask () ': ef) a -> S.Eff eh ef a
+    run :: S.Eff eh (S.Ask () ': ef) a -> S.Eff eh ef a
     run = S.runAsk ()
 
 localSpDeep4 :: Int -> Int
 localSpDeep4 n = S.runEff $ run $ run $ run $ run $ run $ S.runAsk @Int 0 $ run $ S.runLocal @Int $ run $ run $ run $ run $ programSp n
   where
-    run :: S.HFunctors eh => S.Eff eh (S.Ask () ': ef) a -> S.Eff eh ef a
+    run :: S.Eff eh (S.Ask () ': ef) a -> S.Eff eh ef a
     run = S.runAsk ()
 
 localSpDeep5 :: Int -> Int
 localSpDeep5 n = S.runEff $ run $ run $ run $ run $ run $ S.runAsk @Int 0 $ S.runLocal @Int $ run $ run $ run $ run $ run $ programSp n
   where
-    run :: S.HFunctors eh => S.Eff eh (S.Ask () ': ef) a -> S.Eff eh ef a
+    run :: S.Eff eh (S.Ask () ': ef) a -> S.Eff eh ef a
     run = S.runAsk ()
 
 #if SPEFF_BENCH_EFFECTFUL

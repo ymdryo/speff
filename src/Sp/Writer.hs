@@ -17,11 +17,11 @@ data WriterH (w :: Type) :: EffectH where
 tell :: Tell w :> ef => w -> Eff eh ef ()
 tell x = send (Tell x)
 
+{-
 -- | Record what is appended in a specific scope.
 listen :: WriterH w :> eh => Eff eh ef a -> Eff eh ef (a, w)
 listen m = sendH (Listen m)
 
-{-
 handleWriter :: ∀ w es a. Monoid w => [IORef w] -> Handler (Writer w) es a
 handleWriter rs _ = \case
   Tell x   -> for_ rs \r -> unsafeIO (modifyIORef' r (<> x))

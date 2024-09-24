@@ -87,7 +87,11 @@ type EffectH = (Type -> Type) -> Type -> Type
 type EffectF = Type -> Type
 
 -- | The concrete representation of an effect context: a record of internal handler representations.
-data Env eh ef = Env { getEnvH :: !(Rec (InternalElaborator eh ef) eh), getEnvF :: !(Rec InternalHandler ef) }
+data Env eh ef = forall eh' ef'. Env
+    { getEnvH :: !(Rec (InternalElaborator eh' ef') eh)
+    , getEnvF :: !(Rec InternalHandler ef)
+    , contOfInterpret :: forall x. Eff eh ef x -> Eff eh' ef' x
+    }
 
 -- | The effect monad; it is parameterized by the /effect context/, i.e. a row of effects available. This monad is
 -- implemented with evidence passing and a delimited control monad with support of efficient tail-resumptive
@@ -104,10 +108,15 @@ data InternalHandler e =
 
 type role InternalElaborator nominal nominal nominal
 data InternalElaborator eh' ef' e =
-    forall eh ef a. InternalElaborator
+    forall eh ef eh'' ef'' a. InternalElaborator
         !(Marker e eh ef a)
         (Env eh ef)
-        (forall ehSend efSend x. e :> ehSend => e (Eff eh' ef') x -> Eff ehSend efSend x) -- slow: `(Elaborator e eh ef a)`
+        (forall ehSend efSend x. e :> ehSend => e (Eff eh'' ef'') x -> Eff ehSend efSend x) -- slow: `(Elaborator e eh ef a)`
+        (forall x. Eff eh' ef' x -> Eff eh'' ef'' x)
+
+hfmapEh :: (forall x. Eff eh ef x -> Eff eh' ef' x) -> Rec (InternalElaborator eh' ef') es -> Rec (InternalElaborator eh ef) es
+hfmapEh f = Rec.map \(InternalElaborator mark es ie koi) -> InternalElaborator mark es ie (koi . f)
+{-# INLINE hfmapEh #-}
 
 data LiftIns (e :: EffectF) (m :: Type -> Type) a = LiftIns { unLiftIns :: e a }
 
@@ -147,7 +156,7 @@ unsafeIO m = Eff (const $ Ctl $ fmap Pure $ m)
 -- | Convert an effect handler into an internal representation with respect to a certain effect context and prompt
 -- frame.
 toInternalElaborator :: ∀ e eh ef r. Marker e eh ef r -> Env eh ef -> Elaborator e eh ef r -> InternalElaborator eh ef e
-toInternalElaborator mark es hdl = InternalElaborator mark es (\e -> hdl (InterpretTag es mark) e)
+toInternalElaborator mark es hdl = InternalElaborator mark es (\e -> hdl (InterpretTag es mark) e) id
 
 -- | Convert an effect handler into an internal representation with respect to a certain effect context and prompt
 -- frame.
@@ -176,11 +185,20 @@ alterFQ f q = case tviewl q of
 alterEnvF ::
     (Rec InternalHandler ef' -> Rec InternalHandler ef) ->
     Env eh ef' -> Env '[] ef
-alterEnvF f = alterEnv (const Rec.empty) f
+alterEnvF f (Env _ ef _) = Env Rec.empty (f ef) id
 {-# INLINE alterEnvF #-}
 
+alterRec,alterRec' ::
+    (forall f. Rec f eh' -> Rec f eh) ->
+    (Rec InternalHandler ef' -> Rec InternalHandler ef) ->
+    Eff eh ef a -> Eff eh' ef' a
+alterRec mapH mapF = alter \(Env eh ef koi) -> Env (mapH eh) (mapF ef) (koi . alterRec' mapH mapF)
+{-# INLINE alterRec #-}
+alterRec' = alterRec
+{-# NOINLINE alterRec' #-}
+
+{-
 alterRecHF ::
-    HFunctors eh =>
     (Rec (InternalElaborator eh' ef') eh' -> Rec (InternalElaborator eh' ef') eh) ->
     (Rec InternalHandler ef' -> Rec InternalHandler ef) ->
     (forall x. Eff eh ef x -> Eff eh' ef' x) ->
@@ -189,7 +207,6 @@ alterRecHF mapH mapF f = alter $ hfmapEnv mapH mapF f
 {-# INLINE alterRecHF #-}
 
 hfmapEnv ::
-    HFunctors eh =>
     (Rec (InternalElaborator eh' ef') eh' -> Rec (InternalElaborator eh' ef') eh) ->
     (Rec InternalHandler ef' -> Rec InternalHandler ef) ->
     (forall x. Eff eh ef x -> Eff eh' ef' x) ->
@@ -205,14 +222,13 @@ hfmapEnv mapH mapF f =
 {-# INLINE hfmapEnv #-}
 
 alterEnv ::
-    (Rec (InternalElaborator eh' ef') eh' -> Rec (InternalElaborator eh ef) eh) ->
+    (Rec (InternalElaborator eh' ef') eh -> Rec (InternalElaborator eh ef) eh) ->
     (Rec InternalHandler ef' -> Rec InternalHandler ef) ->
     Env eh' ef' -> Env eh ef
-alterEnv mapH mapF = \(Env eh ef) -> Env (mapH eh) (mapF ef)
+alterEnv mapH mapF = \(Env eh ef k) -> Env (mapH eh) (mapF ef) k
 {-# INLINE alterEnv #-}
 
 alterRec,alterRec' ::
-    HFunctors eh =>
     (Rec (InternalElaborator eh' ef') eh' -> Rec (InternalElaborator eh' ef') eh) ->
     (Rec InternalHandler ef' -> Rec InternalHandler ef) ->
     Eff eh ef a -> Eff eh' ef' a
@@ -220,11 +236,20 @@ alterRec mapH mapF = alterRecHF mapH mapF $ alterRec' mapH mapF
 alterRec' = alterRec
 {-# INLINE alterRec #-}
 {-# NOINLINE alterRec' #-}
+-}
+
+{-
+hfmapEnv ::
+    (Rec (InternalElaborator eh' ef') eh' -> Rec (InternalElaborator eh' ef') eh) ->
+    (Rec InternalHandler ef' -> Rec InternalHandler ef) ->
+    (forall x. Eff eh ef x -> Eff eh' ef' x) ->
+    Env eh' ef' -> Env eh ef
+hfmapEnv mapH mapF f (Env eh ef koi) = Env (mapH $ undefined eh) (mapF ef) undefined
+{-# INLINE hfmapEnv #-}
+-}
 
 class HFunctor h where
     hfmap :: (forall x. f x -> g x) -> h f a -> h g a
-
-type HFunctors = Rec.Forall HFunctor
 
 -- | General effect handling. Introduce a prompt frame, convert the supplied handler to an internal one wrt that
 -- frame, and then supply the internal handler to the given function to let it add that to the effect context.
@@ -245,16 +270,16 @@ elaborate f = \elb m -> do
 
 -- | Perform an effect operation.
 send :: e :> ef => e a -> Eff eh ef a
-send e = Eff \es@(Env _ ef) -> do
+send e = Eff \es@(Env _ ef _) -> do
   case Rec.index ef of
     InternalHandler _ _ h -> unEff (h e) es
 {-# INLINE send #-}
 
 -- | Perform an effect operation.
-sendH :: e :> eh => e (Eff eh ef) a -> Eff eh ef a
-sendH e = Eff \es@(Env eh _) -> do
+sendH :: (e :> eh, HFunctor e) => e (Eff eh ef) a -> Eff eh ef a
+sendH e = Eff \es@(Env eh _ koi) -> do
   case Rec.index eh of
-    InternalElaborator _ _ h -> unEff (h e) es
+    InternalElaborator _ _ h koi' -> unEff (h $ hfmap (koi' . koi) e) es
 {-# INLINE sendH #-}
 
 -- | Perform an operation from the handle-site.
@@ -280,7 +305,7 @@ under !mark evv (Eff m) = Eff \_ ->
 
 resumeUnder :: forall e eh ef eh' ef' ans a b. (e :> ef) => Marker (FOE e) eh' ef' ans -> (b -> Eff eh' ef' a) -> (b -> Eff eh ef a)
 resumeUnder !mark k x =
-    Eff \es@(Env _ ef) -> do
+    Eff \es@(Env _ ef _) -> do
         case Rec.index @e ef of
             InternalHandler mark' es' _ ->
                 case eqMarker mark mark' of
@@ -303,9 +328,9 @@ underH !mark evv (Eff m) = Eff \_ ->
 
 resumeUnderH :: forall e eh ef eh' ef' ans a b. (e :> eh) => Marker e eh' ef' ans -> (b -> Eff eh' ef' a) -> (b -> Eff eh ef a)
 resumeUnderH !mark k x =
-    Eff \es@(Env eh _) -> do
+    Eff \es@(Env eh _ _) -> do
         case Rec.index @e eh of
-            InternalElaborator mark' es' _ ->
+            InternalElaborator mark' es' _ _ ->
                 case eqMarker mark mark' of
                     Just (Refl,Refl,Refl) -> unEff (underH @e mark es' (k x)) es
                     Nothing -> error "unreachable"
@@ -327,7 +352,7 @@ control (InterpretTag _ mark) f =
 
 -- | Unwrap the 'Eff' monad.
 runEff :: Eff '[] '[] a -> a
-runEff (Eff m) = unsafePerformIO (runCtl $ m $ Env Rec.empty Rec.empty)
+runEff (Eff m) = unsafePerformIO (runCtl $ m $ Env Rec.empty Rec.empty id)
 {-# INLINE runEff #-}
 
 -- | Ability to embed 'IO' side effects.
@@ -339,5 +364,5 @@ instance IOE :> ef => MonadIO (Eff eh ef) where
 
 -- | Unwrap an 'Eff' monad with 'IO' computations.
 runIOE :: Eff '[] '[IOE] a -> IO a
-runIOE m = runCtl $ unEff m $ Env Rec.empty (Rec.pad Rec.empty)
+runIOE m = runCtl $ unEff m $ Env Rec.empty (Rec.pad Rec.empty) id
 {-# INLINE runIOE #-}

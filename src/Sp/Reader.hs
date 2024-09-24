@@ -12,7 +12,7 @@ ask :: Ask r :> ef => Eff eh ef r
 ask = send Ask
 
 -- | Run the 'Ask' effect with an environment value.
-runAsk :: forall r eh ef a. HFunctors eh => r -> Eff eh (Ask r ': ef) a -> Eff eh ef a
+runAsk :: forall r eh ef a. r -> Eff eh (Ask r ': ef) a -> Eff eh ef a
 runAsk r = interpretRec0 \_ Ask -> pure r
 
 -- | Run the 'Ask' effect with an environment value.
@@ -26,7 +26,7 @@ data Local r :: EffectH where
 local :: Local r :> eh => (r -> r) -> Eff eh ef a -> Eff eh ef a
 local f m = sendH (Local f m)
 
-runLocal :: forall r eh ef a. (HFunctors eh, Ask r :> ef) => Eff (Local r ': eh) ef a -> Eff eh ef a
+runLocal :: forall r eh ef a. Ask r :> ef => Eff (Local r ': eh) ef a -> Eff eh ef a
 runLocal = interpretRec0H \tag (Local f m) -> embedH tag $ interposeRec @(Ask r) (\tag' Ask -> f <$> embed tag' (send Ask)) m
 
 instance HFunctor (Local r) where

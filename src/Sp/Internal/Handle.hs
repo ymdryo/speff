@@ -22,8 +22,8 @@ import           Sp.Internal.Monad
 -- requiring them on the client side achieves effect encapsulation.
 
 type Interpret ef' = ∀ e ef eh a. Handler e eh (ef' ++ ef) a -> Eff '[] (e : ef) a -> Eff eh (ef' ++ ef) a
-type InterpretRec ef' = ∀ e ef eh a. HFunctors eh => (forall x. Handler e eh (ef' ++ ef) x) -> Eff eh (e : ef) a -> Eff eh (ef' ++ ef) a
-type InterpretRecH eh' = ∀ e eh ef a. (HFunctors eh, HFunctor e) => (forall x. Elaborator e (eh' ++ eh) ef x) -> Eff (e ': eh) ef a -> Eff (eh' ++ eh) ef a
+type InterpretRec ef' = ∀ e ef eh a. (forall x. Handler e eh (ef' ++ ef) x) -> Eff eh (e : ef) a -> Eff eh (ef' ++ ef) a
+type InterpretRecH eh' = ∀ e eh ef a. (forall x. Elaborator e (eh' ++ eh) ef x) -> Eff (e ': eh) ef a -> Eff (eh' ++ eh) ef a
 
 -- | Interpret and add extra effects based on type inference. If this does not work consider using the more concrete
 -- functions below.
@@ -43,8 +43,8 @@ interpretN = handle \ih -> alterEnvF (Rec.cons ih . Rec.drop @es')
 
 -- | Interpret and add extra effects based on type inference. If this does not work consider using the more concrete
 -- functions below.
-interpretRec,interpretRec' :: (Suffix ef ef', HFunctors eh) => (forall x. Handler e eh ef' x) -> Eff eh (e : ef) a -> Eff eh ef' a
-interpretRec hdl = handle (\ih -> hfmapEnv id (Rec.cons ih . Rec.suffix) (interpretRec' hdl)) hdl
+interpretRec,interpretRec' :: Suffix ef ef' => (forall x. Handler e eh ef' x) -> Eff eh (e : ef) a -> Eff eh ef' a
+interpretRec hdl = handle (\ih (Env eh ef koi) -> Env eh (Rec.cons ih $ Rec.suffix ef) (koi . interpretRec' hdl)) hdl
 {-# INLINE interpretRec #-}
 interpretRec' = interpretRec
 {-# NOINLINE interpretRec' #-}
@@ -56,15 +56,15 @@ interpretRec0 = interpretRec
 
 -- | Interpret and add a list of extra effects specified explicitly via @TypeApplications@.
 interpretRecN, interpretRecN' :: ∀ es'. KnownList es' => InterpretRec es'
-interpretRecN hdl = handle (\ih -> hfmapEnv id (Rec.cons ih . Rec.drop @es') (interpretRecN' @es' hdl)) hdl
+interpretRecN hdl = handle (\ih (Env eh ef koi) -> Env eh (Rec.cons ih $ Rec.drop @es' ef) (koi . interpretRecN' @es' hdl)) hdl
 {-# INLINE interpretRecN #-}
 interpretRecN' = interpretRecN @es'
 {-# NOINLINE interpretRecN' #-}
 
 -- | Interpret and add extra effects based on type inference. If this does not work consider using the more concrete
 -- functions below.
-interpretRecH,interpretRecH' :: (Suffix eh eh', HFunctors eh, HFunctor e) => (forall x. Elaborator e eh' ef x) -> Eff (e ': eh) ef a -> Eff eh' ef a
-interpretRecH hdl = elaborate (\ie -> hfmapEnv (Rec.cons ie . Rec.suffix) id (interpretRecH' hdl)) hdl
+interpretRecH,interpretRecH' :: Suffix eh eh' => (forall x. Elaborator e eh' ef x) -> Eff (e ': eh) ef a -> Eff eh' ef a
+interpretRecH hdl = elaborate (\ie (Env eh ef koi) -> Env (Rec.cons ie $ hfmapEh koi $ Rec.suffix eh) ef (interpretRecH' hdl)) hdl
 {-# INLINE interpretRecH #-}
 interpretRecH' = interpretRecH
 {-# NOINLINE interpretRecH' #-}
@@ -75,10 +75,10 @@ interpretRec0H = interpretRecH
 {-# INLINE interpretRec0H #-}
 
 -- | Interpret and add a list of extra effects specified explicitly via @TypeApplications@.
-interpretRecNH, interpretRecNH' :: ∀ es'. KnownList es' => InterpretRec es'
-interpretRecNH elb = handle (\ie -> hfmapEnv id (Rec.cons ie . Rec.drop @es') (interpretRecN' @es' elb)) elb
+interpretRecNH, interpretRecNH' :: ∀ es'. KnownList es' => InterpretRecH es'
+interpretRecNH elb = elaborate (\ie (Env eh ef koi) -> Env (Rec.cons ie $ hfmapEh koi $ Rec.drop @es' eh) ef (interpretRecNH' @es' elb)) elb
 {-# INLINE interpretRecNH #-}
-interpretRecNH' = interpretRecN @es'
+interpretRecNH' = interpretRecNH @es'
 {-# NOINLINE interpretRecNH' #-}
 
 --------------------------------------------------------------------------------
@@ -89,8 +89,8 @@ interpretRecNH' = interpretRecN @es'
 -- optionally add some other effects (@es'@) that could be used in said handler.
 
 type Interpose ef' = ∀ e ef eh a. e :> ef => Handler e eh (ef' ++ ef) a -> Eff '[] ef a -> Eff eh (ef' ++ ef) a
-type InterposeRec ef' = ∀ e ef eh a. (e :> ef, HFunctors eh) => (forall x. Handler e eh (ef' ++ ef) x) -> Eff eh ef a -> Eff eh (ef' ++ ef) a
-type InterposeRecH eh' = ∀ e eh ef a. (e :> eh, HFunctors eh) => (forall x. Elaborator e (eh' ++ eh) ef x) -> Eff eh ef a -> Eff (eh' ++ eh) ef a
+type InterposeRec ef' = ∀ e ef eh a. e :> ef => (forall x. Handler e eh (ef' ++ ef) x) -> Eff eh ef a -> Eff eh (ef' ++ ef) a
+type InterposeRecH eh' = ∀ e eh ef a. e :> eh => (forall x. Elaborator e (eh' ++ eh) ef x) -> Eff eh ef a -> Eff (eh' ++ eh) ef a
 
 -- | Interpose and add extra effects based on type inference. If this does not work consider using the more concrete
 -- functions below.
@@ -110,8 +110,8 @@ interposeN = handle \ie -> alterEnvF $ Rec.update ie . Rec.drop @es'
 
 -- | Interpose and add extra effects based on type inference. If this does not work consider using the more concrete
 -- functions below.
-interposeRec,interposeRec' :: (e :> ef, Suffix ef ef', HFunctors eh) => (forall x. Handler e eh ef' x) -> Eff eh ef a -> Eff eh ef' a
-interposeRec hdl = handle (\ie -> hfmapEnv id (Rec.update ie . Rec.suffix) (interposeRec' hdl)) hdl
+interposeRec,interposeRec' :: (e :> ef, Suffix ef ef') => (forall x. Handler e eh ef' x) -> Eff eh ef a -> Eff eh ef' a
+interposeRec hdl = handle (\ie (Env eh ef koi) -> Env eh (Rec.update ie $ Rec.suffix ef) (koi . interposeRec' hdl)) hdl
 {-# INLINE interposeRec #-}
 interposeRec' = interposeRec
 {-# NOINLINE interposeRec' #-}
@@ -123,15 +123,15 @@ interposeRec0 = interposeRec
 
 -- | Interpose and add a list of extra effects specified explicitly via @TypeApplications@.
 interposeRecN,interposeRecN' :: ∀ es'. KnownList es' => InterposeRec es'
-interposeRecN hdl = handle (\ie -> hfmapEnv id (Rec.update ie . Rec.drop @es') (interposeRecN' @es' hdl)) hdl
+interposeRecN hdl = handle (\ie (Env eh ef koi) -> Env eh (Rec.update ie $ Rec.drop @es' ef) (koi . interposeRecN' @es' hdl)) hdl
 {-# INLINE interposeRecN #-}
 interposeRecN' = interposeRecN @es'
 {-# NOINLINE interposeRecN' #-}
 
 -- | Interpose and add extra effects based on type inference. If this does not work consider using the more concrete
 -- functions below.
-interposeRecH,interposeRecH' :: (e :> eh, Suffix eh eh', HFunctors eh) => (forall x. Elaborator e eh' ef x) -> Eff eh ef a -> Eff eh' ef a
-interposeRecH elb = elaborate (\ie -> hfmapEnv (Rec.update ie . Rec.suffix) id (interposeRecH' elb)) elb
+interposeRecH,interposeRecH' :: (e :> eh, Suffix eh eh') => (forall x. Elaborator e eh' ef x) -> Eff eh ef a -> Eff eh' ef a
+interposeRecH elb = elaborate (\ie (Env eh ef koi) -> Env (Rec.update ie $ hfmapEh koi $ Rec.suffix eh) ef (interposeRecH' elb)) elb
 {-# INLINE interposeRecH #-}
 interposeRecH' = interposeRecH
 {-# NOINLINE interposeRecH' #-}
@@ -143,7 +143,7 @@ interposeRec0H = interposeRecH
 
 -- | Interpose and add a list of extra effects specified explicitly via @TypeApplications@.
 interposeRecNH,interposeRecNH' :: ∀ es'. KnownList es' => InterposeRecH es'
-interposeRecNH elb = elaborate (\ie -> hfmapEnv (Rec.update ie . Rec.drop @es') id (interposeRecNH' @es' elb)) elb
+interposeRecNH elb = elaborate (\ie (Env eh ef koi) -> Env (Rec.update ie $ hfmapEh koi $ Rec.drop @es' eh) ef (interposeRecNH' @es' elb)) elb
 {-# INLINE interposeRecNH #-}
 interposeRecNH' = interposeRecNH @es'
 {-# NOINLINE interposeRecNH' #-}
@@ -154,11 +154,11 @@ interposeRecNH' = interposeRecNH @es'
 
 -- | The family of /lifting/ functions. They trivially lift a computation over some effects into a larger effect
 -- context. It can be also seen as masking a set of effects from the inner computation.
-type Lift ef' = ∀ eh ef a. HFunctors eh => Eff eh ef a -> Eff eh (ef' ++ ef) a
+type Lift ef' = ∀ eh ef a. Eff eh ef a -> Eff eh (ef' ++ ef) a
 
 -- | Lift over some effects based on type inference. If this does not work consider using the more concrete functions
 -- below.
-lift :: (Suffix ef ef', HFunctors eh) => Eff eh ef a -> Eff eh ef' a
+lift :: Suffix ef ef' => Eff eh ef a -> Eff eh ef' a
 lift = alterRec id Rec.suffix
 {-# INLINE lift #-}
 
@@ -184,11 +184,11 @@ liftN = alterRec id (Rec.drop @ef')
 
 -- | The family of /lifting/ functions. They trivially lift a computation over some effects into a larger effect
 -- context. It can be also seen as masking a set of effects from the inner computation.
-type LiftH eh' = ∀ eh ef a. HFunctors eh => Eff eh ef a -> Eff (eh' ++ eh) ef a
+type LiftH eh' = ∀ eh ef a. Eff eh ef a -> Eff (eh' ++ eh) ef a
 
 -- | Lift over some effects based on type inference. If this does not work consider using the more concrete functions
 -- below.
-liftH :: (Suffix eh eh', HFunctors eh) => Eff eh ef a -> Eff eh' ef a
+liftH :: Suffix eh eh' => Eff eh ef a -> Eff eh' ef a
 liftH = alterRec Rec.suffix id
 {-# INLINE liftH #-}
 
@@ -217,11 +217,11 @@ liftNH = alterRec id (Rec.drop @ef')
 --------------------------------------------------------------------------------
 
 -- | The family of /lifting-under-1/ functions. They lift over several effects /under/ one effect.
-type LiftNUnder ef' = ∀ e ef eh a. HFunctors eh => Eff eh (e ': ef) a -> Eff eh (e ': ef' ++ ef) a
+type LiftNUnder ef' = ∀ e ef eh a. Eff eh (e ': ef) a -> Eff eh (e ': ef' ++ ef) a
 
 -- | Lift over several effect under 1 effect, based on type inference. If this does not work consider using the more
 -- concrete functions below.
-liftUnder1 :: (Suffix ef ef', HFunctors eh) => Eff eh (e : ef) a -> Eff eh (e : ef') a
+liftUnder1 :: Suffix ef ef' => Eff eh (e : ef) a -> Eff eh (e : ef') a
 liftUnder1 = alterRec id (\es -> Rec.cons (Rec.head es) $ Rec.suffix es)
 {-# INLINE liftUnder1 #-}
 
@@ -231,11 +231,11 @@ lift1Under1 = liftUnder1
 {-# INLINE lift1Under1 #-}
 
 -- | The family of /lifting-under-1/ functions. They lift over several effects /under/ one effect.
-type LiftNUnderH eh' = ∀ e eh ef a. (HFunctors eh, HFunctor e) => Eff (e : eh) ef a -> Eff (e : eh' ++ eh) ef a
+type LiftNUnderH eh' = ∀ e eh ef a. Eff (e : eh) ef a -> Eff (e : eh' ++ eh) ef a
 
 -- | Lift over several effect under 1 effect, based on type inference. If this does not work consider using the more
 -- concrete functions below.
-liftUnder1H :: (Suffix eh eh', HFunctor e, HFunctors eh) => Eff (e : eh) ef a -> Eff (e : eh') ef a
+liftUnder1H :: Suffix eh eh' => Eff (e : eh) ef a -> Eff (e : eh') ef a
 liftUnder1H = alterRec (\es -> Rec.cons (Rec.head es) $ Rec.suffix es) id
 {-# INLINE liftUnder1H #-}
 
@@ -282,13 +282,13 @@ lift1UnderN = alterRec (\es -> Rec.concat (Rec.take @es' @(e : es) es) $ Rec.tai
 
 -- | The most general /lifting-under/ function. Lifts over a list of effects under another list of effects. Both
 -- lists are to supplied explicitly via @TypeApplications@.
-liftNUnderN :: ∀ ef'' ef' ef eh a. (KnownList ef', KnownList ef'', HFunctors eh) => Eff eh (ef' ++ ef) a -> Eff eh (ef' ++ ef'' ++ ef) a
+liftNUnderN :: ∀ ef'' ef' ef eh a. (KnownList ef', KnownList ef'') => Eff eh (ef' ++ ef) a -> Eff eh (ef' ++ ef'' ++ ef) a
 liftNUnderN = alterRec id (\ef -> Rec.concat (Rec.take @ef' @(ef'' ++ ef) ef) $ Rec.drop @ef'' @ef $ Rec.drop @ef' @(ef'' ++ ef) ef)
 {-# INLINE liftNUnderN #-}
 
 -- | The most general /lifting-under/ function. Lifts over a list of effects under another list of effects. Both
 -- lists are to supplied explicitly via @TypeApplications@.
-liftNUnderNH :: ∀ eh'' eh' eh ef a. (KnownList eh', KnownList eh'', HFunctors (eh' ++ eh)) => Eff (eh' ++ eh) ef a -> Eff (eh' ++ eh'' ++ eh) ef a
+liftNUnderNH :: ∀ eh'' eh' eh ef a. (KnownList eh', KnownList eh'') => Eff (eh' ++ eh) ef a -> Eff (eh' ++ eh'' ++ eh) ef a
 liftNUnderNH = alterRec (\eh -> Rec.concat (Rec.take @eh' @(eh'' ++ eh) eh) $ Rec.drop @eh'' @eh $ Rec.drop @eh' @(eh'' ++ eh) eh) id
 {-# INLINE liftNUnderNH #-}
 

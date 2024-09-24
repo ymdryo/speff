@@ -28,37 +28,37 @@ catchSp n = S.runEff $ S.runThrow $ S.runTry @() $ programSp n
 catchSpDeep0 :: Int -> Either () ()
 catchSpDeep0 n = S.runEff $ run $ run $ run $ run $ run $ S.runThrow $ run $ run $ run $ run $ run $ S.runTry @() $ programSp n
   where
-    run :: S.HFunctors eh => S.Eff eh (S.Ask () ': ef) a -> S.Eff eh ef a
+    run :: S.Eff eh (S.Ask () ': ef) a -> S.Eff eh ef a
     run = S.runAsk ()
 
 catchSpDeep1 :: Int -> Either () ()
 catchSpDeep1 n = S.runEff $ run $ run $ run $ run $ run $ S.runThrow $ run $ run $ run $ run $ S.runTry @() $ run $ programSp n
   where
-    run :: S.HFunctors eh => S.Eff eh (S.Ask () ': ef) a -> S.Eff eh ef a
+    run :: S.Eff eh (S.Ask () ': ef) a -> S.Eff eh ef a
     run = S.runAsk ()
 
 catchSpDeep2 :: Int -> Either () ()
 catchSpDeep2 n = S.runEff $ run $ run $ run $ run $ run $ S.runThrow $ run $ run $ run $ S.runTry @() $ run $ run $ programSp n
   where
-    run :: S.HFunctors eh => S.Eff eh (S.Ask () ': ef) a -> S.Eff eh ef a
+    run :: S.Eff eh (S.Ask () ': ef) a -> S.Eff eh ef a
     run = S.runAsk ()
 
 catchSpDeep3 :: Int -> Either () ()
 catchSpDeep3 n = S.runEff $ run $ run $ run $ run $ run $ S.runThrow $ run $ run $ S.runTry @() $ run $ run $ run $ programSp n
   where
-    run :: S.HFunctors eh => S.Eff eh (S.Ask () ': ef) a -> S.Eff eh ef a
+    run :: S.Eff eh (S.Ask () ': ef) a -> S.Eff eh ef a
     run = S.runAsk ()
 
 catchSpDeep4 :: Int -> Either () ()
 catchSpDeep4 n = S.runEff $ run $ run $ run $ run $ run $ S.runThrow $ run $ S.runTry @() $ run $ run $ run $ run $ programSp n
   where
-    run :: S.HFunctors eh => S.Eff eh (S.Ask () ': ef) a -> S.Eff eh ef a
+    run :: S.Eff eh (S.Ask () ': ef) a -> S.Eff eh ef a
     run = S.runAsk ()
 
 catchSpDeep5 :: Int -> Either () ()
 catchSpDeep5 n = S.runEff $ run $ run $ run $ run $ run $ S.runThrow $ S.runTry @() $ run $ run $ run $ run $ run $ programSp n
   where
-    run :: S.HFunctors eh => S.Eff eh (S.Ask () ': ef) a -> S.Eff eh ef a
+    run :: S.Eff eh (S.Ask () ': ef) a -> S.Eff eh ef a
     run = S.runAsk ()
 
 #if SPEFF_BENCH_EFFECTFUL

@@ -40,7 +40,6 @@ module Sp.Internal.Env
   , type AllMembers
   , type Subset
   , extract
-  , Forall (..)
   , map
   ) where
 
@@ -169,6 +168,11 @@ update :: ∀ e es f. e :> es => f e -> Rec f es -> Rec f es
 update x (Rec vec) = Rec $ Vec.update (reifyIndex @_ @e @es) (toAny x) vec
 {-# INLINE update #-}
 
+map :: forall es f g. (forall e. f e -> g e) -> Rec f es -> Rec g es
+map f (Rec vec) = Rec $ Vec.map (toAny . f . fromAny) vec
+{-# INLINE map #-}
+
+{-
 map :: forall c es f g. Forall c es => (forall e. (c e, e :> es) => f e -> g e) -> Rec f es -> Rec g es
 map f (Rec vec) =
     Rec $ (`Vec.mapFoldr` vec) \modify ->
@@ -186,6 +190,7 @@ instance (c e, Forall c es) => Forall c (e ': es) where
 weaken :: forall e' e es r. e' :> es => (e' :> e ': es => r) -> r
 weaken x = withDict @(e' :> e ': es) (reifyIndex @_ @e' @es + 1) x
 {-# INLINE weaken #-}
+-}
 
 --------------------------------------------------------------------------------
 -- Subset Operations -----------------------------------------------------------

@@ -37,7 +37,7 @@ handleStateIO r _ = \case
   Put s   -> unsafeIO $ writeIORef r s
 
 -- | Run the 'State' effect with an initial value for the mutable state.
-runStateIO :: HFunctors eh => s -> Eff eh (State s : ef) a -> Eff eh ef (a, s)
+runStateIO :: s -> Eff eh (State s : ef) a -> Eff eh ef (a, s)
 runStateIO s m = do
   r <- unsafeIO $ newIORef s
   x <- interpretRec (handleStateIO r) m
@@ -47,7 +47,7 @@ runStateIO s m = do
 -- todo: runStatePure
 
 
-runStatePureRec :: HFunctors eh => s -> Eff eh (State s ': ef) a -> Eff eh ef (a, s)
+runStatePureRec :: s -> Eff eh (State s ': ef) a -> Eff eh ef (a, s)
 runStatePureRec s m = runAsk s . interpretRec0 (\tag -> \case
         Get -> embed tag $ send Ask
         Put s' -> control tag \k -> lift1 $ runAsk s' $ k $ pure ()
