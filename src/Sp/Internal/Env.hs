@@ -173,7 +173,7 @@ map :: forall c es f g. Forall c es => (forall e. (c e, e :> es) => f e -> g e) 
 map f (Rec vec) =
     Rec $ (`Vec.mapFoldr` vec) \modify ->
         foldrForall @_ @c @es \(_ :: Proxy e) ->
-            modify $ toAny . f @e . fromAny
+            modify (toAny . f @e . fromAny) (reifyIndex @_ @e @es)
 {-# INLINE map #-}
 
 class Forall (c :: k -> Constraint) (es :: [k]) where
@@ -181,7 +181,7 @@ class Forall (c :: k -> Constraint) (es :: [k]) where
 instance Forall c '[] where
     foldrForall _ = id
 instance (c e, Forall c es) => Forall c (e ': es) where
-    foldrForall f = f (Proxy @e) . foldrForall @_ @c @es \(e' :: Proxy e') -> weaken @e' @e @es $ f e'
+    foldrForall f = f (Proxy @e)  . foldrForall @_ @c @es \(e' :: Proxy e') -> weaken @e' @e @es $ f e'
 
 weaken :: forall e' e es r. e' :> es => (e' :> e ': es => r) -> r
 weaken x = withDict @(e' :> e ': es) (reifyIndex @_ @e' @es + 1) x

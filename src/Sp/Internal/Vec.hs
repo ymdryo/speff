@@ -105,20 +105,20 @@ update ix x (Vec off len arr) = Vec 0 len $ runArray do
   writeArray marr ix x
   pure marr
 
-mapFoldr :: (forall r. ((a -> b) -> r -> r) -> r -> r) -> Vec a -> Vec b
+mapFoldr :: (forall r. ((a -> b) -> Int -> r -> r) -> r -> r) -> Vec a -> Vec b
 mapFoldr folder (Vec off len arr) = Vec off len $ runArray do
     marr <- newArray len nil
     folder
-        (\f k -> \ix -> do
-            if (ix >= len) then
+        (\f ix k -> do
+            let ix' = ix - off
+            if (ix' >= len) then
                 pure marr
             else do
-                when (ix >= 0) do
-                    writeArray marr ix (f $ indexArray arr ix)
-                k $ ix + 1
+                when (ix' >= 0) do
+                    writeArray marr ix' (f $ indexArray arr ix')
+                k
         )
-        (\_ -> pure marr)
-        (-off)
+        (pure marr)
 {-# INLINE mapFoldr #-}
 
 
