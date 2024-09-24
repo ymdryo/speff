@@ -2,7 +2,7 @@
 module Main where
 
 import           BenchCatch
-import           BenchCountdown
+-- import           BenchCountdown
 import           BenchLocal
 import           BenchPyth
 import           BenchCoroutine
@@ -11,7 +11,7 @@ import           Test.Tasty.Bench
 
 main :: IO ()
 main = defaultMain
-  [ bgroup "countdown" $ [10000] <&> \x -> bgroup (show x)
+  [ {-bgroup "countdown" $ [10000] <&> \x -> bgroup (show x)
     [ bench "sp_modified_for_non_scoped_resumption_support.shallow" $ nf countdownSp x
     , bench "sp_modified_for_non_scoped_resumption_support.deep" $ nf countdownSpDeep x
 #if SPEFF_BENCH_EFFECTFUL
@@ -31,7 +31,7 @@ main = defaultMain
     , bench "sem.shallow" $ nf countdownSem x
     , bench "sem.deep" $ nf countdownSemDeep x
     ]
-  , bgroup "pyth" $ [32] <&> \x -> bgroup (show x)
+  , -} bgroup "pyth" $ [32] <&> \x -> bgroup (show x)
     [ bench "sp_modified_for_non_scoped_resumption_support.shallow" $ nf pythSp x
     , bench "sp_modified_for_non_scoped_resumption_support.deep" $ nf pythSpDeep x
     , bench "ev.shallow" $ nf pythEv x

@@ -22,15 +22,23 @@ import           GHC.Exts               (RealWorld)
 import           Unsafe.Coerce          (unsafeCoerce)
 import Data.Functor ((<&>))
 import Sp.Internal.FTCQueue
+import Data.Functor.Identity (Identity, runIdentity)
+import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 
 -- | The source from which we construct unique 'Marker's.
-uniqueSource :: PrimVar RealWorld Int
-uniqueSource = unsafePerformIO (newPrimVar 0)
+uniqueSource :: IORef Int
+uniqueSource = unsafePerformIO (newIORef 0)
 {-# NOINLINE uniqueSource #-}
 
 -- | Create a fresh 'Marker'.
-freshMarker :: Eff es (Marker e es' a)
-freshMarker = Eff \_ -> Ctl $ fmap Pure $ Marker <$> fetchAddInt uniqueSource 1
+freshMarker :: (Marker e es' a -> Eff es a) -> Eff es a
+freshMarker f =
+    let m = unsafePerformIO do
+            i <- readIORef uniqueSource
+            writeIORef uniqueSource (i+1)
+            pure i
+    in seq m $ f $ Marker m
+{-# NOINLINE freshMarker #-}
 
 -- | A @'Marker' a@ marks a prompt frame over a computation returning @a@.
 type role Marker nominal nominal representational
@@ -54,7 +62,7 @@ data Result es (a :: Type)
 
 -- | The delimited control monad, with efficient support of tail-resumptive computations.
 type role Ctl nominal nominal
-newtype Ctl es (a :: Type) = Ctl { unCtl :: IO (Result es a) }
+newtype Ctl es (a :: Type) = Ctl { unCtl :: Identity (Result es a) }
 
 -- | Install a prompt frame.
 prompt, prompt' :: (Env es' -> Env es) -> Marker e es' a -> Eff es a -> Eff es' a
@@ -71,7 +79,7 @@ prompt' = prompt
 {-# NOINLINE prompt' #-}
 
 -- | Unwrap the 'Ctl' monad.
-runCtl :: Ctl es a -> IO a
+runCtl :: Ctl es a -> Identity a
 runCtl (Ctl m) = m >>= \case
   Pure a     -> pure a
   Abort {}   -> error "Sp.Ctl: Unhandled abort operation. Forgot to pair it with a prompt?"
@@ -126,13 +134,6 @@ data HandleTag e (es :: [Effect]) (r :: Type) = HandleTag (Env es) !(Marker e es
 -- | A handler of effect @e@ introduced in context @es@ over a computation returning @r@.
 type Handler e es r = ∀ e' esSend a. (e' :> esSend, e :> esSend) => HandleTag e' es r -> e (Eff esSend) a -> Eff esSend a
 
--- | This "unsafe" @IO@ function is perfectly safe in the sense that it won't panic or otherwise cause undefined
--- behaviors; it is only unsafe when it is used to embed arbitrary @IO@ actions in any effect environment,
--- therefore breaking effect abstraction.
-unsafeIO :: IO a -> Eff es a
-unsafeIO m = Eff (const $ Ctl $ fmap Pure $ m)
-{-# INLINE unsafeIO #-}
-
 -- | Convert an effect handler into an internal representation with respect to a certain effect context and prompt
 -- frame.
 toInternalHandler :: ∀ e es r. Marker e es r -> Env es -> Handler e es r -> InternalHandler e
@@ -160,9 +161,7 @@ alterFQ f q = case tviewl q of
 -- | General effect handling. Introduce a prompt frame, convert the supplied handler to an internal one wrt that
 -- frame, and then supply the internal handler to the given function to let it add that to the effect context.
 handle :: (HandlerCell e -> Env es' -> Env es) -> Handler e es' a -> Eff es a -> Eff es' a
-handle f = \hdl m -> do
-  mark <- freshMarker
-  -- let cell = toInternalHandler mark es hdl
+handle f = \hdl m -> freshMarker \mark -> do
   prompt (\es' -> f (HandlerCell $ toInternalHandler mark es' hdl) es') mark m
 {-# INLINE handle #-}
 
@@ -220,17 +219,5 @@ control (HandleTag _ mark) f =
 
 -- | Unwrap the 'Eff' monad.
 runEff :: Eff '[] a -> a
-runEff (Eff m) = unsafePerformIO (runCtl $ m Rec.empty)
+runEff (Eff m) = runIdentity (runCtl $ m Rec.empty)
 {-# INLINE runEff #-}
-
--- | Ability to embed 'IO' side effects.
-data IOE :: Effect
-
-instance IOE :> es => MonadIO (Eff es) where
-  liftIO = unsafeIO
-  {-# INLINE liftIO #-}
-
--- | Unwrap an 'Eff' monad with 'IO' computations.
-runIOE :: Eff '[IOE] a -> IO a
-runIOE m = runCtl $ unEff m (Rec.pad Rec.empty)
-{-# INLINE runIOE #-}

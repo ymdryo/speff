@@ -90,8 +90,8 @@ library
     Sp.Internal.FTCQueue
     Sp.NonDet
     Sp.Reader
-    Sp.State
-    Sp.Writer
+    -- Sp.State
+    -- Sp.Writer
     Sp.Coroutine
     Sp.Test
 
@@ -124,7 +124,7 @@ benchmark speff-bench
 
   other-modules:
     BenchCatch
-    BenchCountdown
+    -- BenchCountdown
     BenchLocal
     BenchPyth
     BenchCoroutine

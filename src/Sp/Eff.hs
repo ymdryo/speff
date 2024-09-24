@@ -12,14 +12,12 @@ module Sp.Eff (
     -- * Basic types and operations
     Effect,
     Eff,
-    IOE,
     (:>),
 
     -- ** Performing effects
     send,
 
     -- ** Unwrapping
-    runIOE,
     runEff,
 
     -- * Effect handling
