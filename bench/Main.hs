@@ -14,6 +14,8 @@ main = defaultMain
   [ bgroup "countdown" $ [10000] <&> \x -> bgroup (show x)
     [ bench "sp_modified_for_non_scoped_resumption_support.shallow" $ nf countdownSp x
     , bench "sp_modified_for_non_scoped_resumption_support.deep" $ nf countdownSpDeep x
+    , bench "sp_modified_for_non_scoped_resumption_support.shallowIO" $ nf countdownSpIO x
+    , bench "sp_modified_for_non_scoped_resumption_support.deepIO" $ nf countdownSpDeepIO x
 #if SPEFF_BENCH_EFFECTFUL
     , bench "effectful.shallow" $ nf countdownEffectful x
     , bench "effectful.deep" $ nf countdownEffectfulDeep x

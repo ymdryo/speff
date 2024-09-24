@@ -1,18 +1,11 @@
-module Sp.State
-  ( -- * State
-    State (..)
-  , get
-  , put
-  , modify
-  , state
-  , runState
-  ) where
+module Sp.State where
 
 import           Data.Functor      (($>))
 import           Data.IORef        (IORef, readIORef, writeIORef)
 import           Sp.Eff
 import GHC.IORef (newIORef)
 import Sp.Internal.Monad (unsafeIO)
+import Sp.Reader (runReader, ask)
 
 
 -- | Provides a mutable state of type @s@.
@@ -47,9 +40,19 @@ handleState r _ = \case
     writeIORef r s1 $> x
 
 -- | Run the 'State' effect with an initial value for the mutable state.
-runState :: s -> Eff (State s : es) a -> Eff es (a, s)
-runState s m = do
+runStateIO :: s -> Eff (State s : es) a -> Eff es (a, s)
+runStateIO s m = do
   r <- unsafeIO $ newIORef s
   x <- interpret (handleState r) m
   s' <- unsafeIO (readIORef r)
   pure (x, s')
+
+
+runStatePure :: s -> Eff (State s ': ef) a -> Eff ef (a, s)
+runStatePure s m = runReader s . interpret0 (\tag -> \case
+        Get -> embed tag ask
+        Put s' -> control tag \k -> lift1 $ runReader s' $ k $ pure ()
+    ) $ lift1Under1 do
+        r <- m
+        s' <- get
+        pure (r,s')
