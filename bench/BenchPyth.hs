@@ -32,7 +32,7 @@ pythSp :: Int -> [(Int, Int, Int)]
 pythSp n = S.runEff $ S.runNonDet $ programSp n
 
 pythSpDeep :: Int -> [(Int, Int, Int)]
-pythSpDeep n = S.runEff $ run $ run $ run $ run $ run $ S.runNonDet $ run $ run $ run $ run $ run $ programSp n
+pythSpDeep n = S.runEff $ run $ run $ run $ run $ run $ S.runNonDet $ run $ run $ run $ run $ run $ run $ run $ run $ run $ run $ run $ run $ run $ run $ run $ programSp n
   where run = S.runReader ()
 
 programEv :: (E.Choose E.:? e) => Int -> E.Eff e (Int, Int, Int)
@@ -47,7 +47,7 @@ pythEv :: Int -> [(Int, Int, Int)]
 pythEv n = E.runEff $ E.chooseAll $ programEv n
 
 pythEvDeep :: Int -> [(Int, Int, Int)]
-pythEvDeep n = E.runEff $ run $ run $ run $ run $ run $ E.chooseAll $ run $ run $ run $ run $ run $ programEv n
+pythEvDeep n = E.runEff $ run $ run $ run $ run $ run $ E.chooseAll $ run $ run $ run $ run $ run $ run $ run $ run $ run $ run $ run $ run $ run $ run $ run $ programEv n
   where run = E.reader ()
 
 #ifdef SPEFF_BENCH_FREER_SIMPLE
@@ -66,7 +66,7 @@ pythFreer :: Int -> [(Int, Int, Int)]
 pythFreer n = FS.run $ FS.makeChoiceA $ programFreer n
 
 pythFreerDeep :: Int -> [(Int, Int, Int)]
-pythFreerDeep n = FS.run $ run $ run $ run $ run $ run $ FS.makeChoiceA $ run $ run $ run $ run $ run $ programFreer n
+pythFreerDeep n = FS.run $ run $ run $ run $ run $ run $ FS.makeChoiceA $ run $ run $ run $ run $ run $ run $ run $ run $ run $ run $ run $ run $ run $ run $ run $ programFreer n
   where run = FS.runReader ()
 #endif
 
@@ -83,7 +83,7 @@ pythFused :: Int -> [(Int, Int, Int)]
 pythFused n = F.run $ F.runNonDetA $ programFused n
 
 pythFusedDeep :: Int -> [(Int, Int, Int)]
-pythFusedDeep n = F.run $ run $ run $ run $ run $ run $ F.runNonDetA $ run $ run $ run $ run $ run $ programFused n
+pythFusedDeep n = F.run $ run $ run $ run $ run $ run $ F.runNonDetA $ run $ run $ run $ run $ run $ run $ run $ run $ run $ run $ run $ run $ run $ run $ run $ programFused n
   where run = F.runReader ()
 
 programSem :: P.Member P.NonDet es => Int -> P.Sem es (Int, Int, Int)
@@ -101,5 +101,5 @@ pythSem :: Int -> [(Int, Int, Int)]
 pythSem n = P.run $ P.runNonDet $ programSem n
 
 pythSemDeep :: Int -> [(Int, Int, Int)]
-pythSemDeep n = P.run $ run $ run $ run $ run $ run $ P.runNonDet $ run $ run $ run $ run $ run $ programSem n
+pythSemDeep n = P.run $ run $ run $ run $ run $ run $ P.runNonDet $ run $ run $ run $ run $ run $ run $ run $ run $ run $ run $ run $ run $ run $ run $ run $ programSem n
   where run = P.runReader ()
