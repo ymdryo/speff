@@ -37,10 +37,17 @@ programSp = do
 {-# NOINLINE programSp #-}
 
 countdownSp :: Int -> (Int, Int)
-countdownSp n = S.runEff $ S.runStateIO n programSp
+countdownSp n = S.runEff $ S.runStatePure n programSp
 
 countdownSpDeep :: Int -> (Int, Int)
-countdownSpDeep n = S.runEff $ runR $ runR $ runR $ runR $ runR $ S.runStateIO n $ runR $ runR $ runR $ runR $ runR $ programSp
+countdownSpDeep n = S.runEff $ runR $ runR $ runR $ runR $ runR $ S.runStatePure n $ runR $ runR $ runR $ runR $ runR $ programSp
+  where runR = S.runAsk ()
+
+countdownSpIO :: Int -> (Int, Int)
+countdownSpIO n = S.runEff $ S.runStateIO n programSp
+
+countdownSpDeepIO :: Int -> (Int, Int)
+countdownSpDeepIO n = S.runEff $ runR $ runR $ runR $ runR $ runR $ S.runStateIO n $ runR $ runR $ runR $ runR $ runR $ programSp
   where runR = S.runAsk ()
 
 #if SPEFF_BENCH_EFFECTFUL
