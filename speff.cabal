@@ -32,7 +32,7 @@ common lang
     , exceptions  ^>=0.10
     , primitive   >=0.8   && <0.10
     , constraints
-    , eff
+    , hefty-freer-simple
 
   ghc-options:
     -Wall -Widentities -Wincomplete-record-updates
@@ -109,6 +109,7 @@ benchmark speff-bench
   build-depends:
     , eveff          ^>=1.0
     , freer-simple   ^>=1.2
+    , hefty-freer-simple  ^>=1.2
     , fused-effects  ^>=1.1
     , mtl            >=2.2  && <2.4
     , polysemy       ^>=1.9
@@ -136,4 +137,5 @@ executable Main
     main-is: Main.hs
     build-depends:
           base
+        , hefty-freer-simple
         , speff

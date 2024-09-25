@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE PackageImports #-}
 -- Benchmarking effect invocation and monadic bind
 module BenchCountdown where
 
@@ -7,9 +8,9 @@ import qualified Control.Carrier.State.Strict as F
 import qualified Control.Ev.Eff               as E
 import qualified Control.Ev.Util              as E
 #ifdef SPEFF_BENCH_FREER_SIMPLE
-import qualified Control.Monad.Freer          as FS
-import qualified Control.Monad.Freer.Reader   as FS
-import qualified Control.Monad.Freer.State    as FS
+import qualified "freer-simple" Control.Monad.Freer          as FS
+import qualified "freer-simple" Control.Monad.Freer.Reader   as FS
+import qualified "freer-simple" Control.Monad.Freer.State    as FS
 #endif
 import qualified Control.Monad.Identity       as M
 import qualified Control.Monad.Reader         as M
@@ -25,6 +26,9 @@ import qualified Polysemy.State               as P
 import qualified Sp.Eff                       as S
 import qualified Sp.Reader                    as S
 import qualified Sp.State                     as S
+import qualified "hefty-freer-simple" Control.Monad.Freer          as HF
+import qualified "hefty-freer-simple" Control.Monad.Freer.Reader   as HF
+import qualified "hefty-freer-simple" Control.Monad.Freer.State    as HF
 
 programSp :: S.State Int S.:> ef => S.Eff eh ef Int
 programSp = do
@@ -105,6 +109,23 @@ countdownFreerDeep :: Int -> (Int, Int)
 countdownFreerDeep n = FS.run $ runR $ runR $ runR $ runR $ runR $ FS.runState n $ runR $ runR $ runR $ runR $ runR $ programFreer
   where runR = FS.runReader ()
 #endif
+
+programHeftyFreer :: HF.Member (HF.State Int) es => HF.Eff '[] es Int
+programHeftyFreer = do
+  x <- HF.get @Int
+  if x == 0
+    then pure x
+    else do
+      HF.put (x - 1)
+      programHeftyFreer
+{-# NOINLINE programHeftyFreer #-}
+
+countdownHeftyFreer :: Int -> (Int, Int)
+countdownHeftyFreer n = HF.run $ HF.runState n programHeftyFreer
+
+countdownHeftyFreerDeep :: Int -> (Int, Int)
+countdownHeftyFreerDeep n = HF.run $ runR $ runR $ runR $ runR $ runR $ HF.runState n $ runR $ runR $ runR $ runR $ runR $ programHeftyFreer
+  where runR = HF.runReader ()
 
 programMtl :: M.MonadState Int m => m Int
 programMtl = do

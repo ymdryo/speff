@@ -18,6 +18,11 @@ source-repository-package
 
 source-repository-package
     type: git
+    location: https://github.com/ymdryo/hefty-freer-simple.git
+    tag: ac0aa83817665ecd4f75018b546b947408190312
+
+source-repository-package
+    type: git
     location: https://github.com/lexi-lambda/eff
     tag: a6ad3c7d7c62d21cf088af109ceb1d10a56b7125
     subdir: eff

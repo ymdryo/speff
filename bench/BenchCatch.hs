@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE PackageImports #-}
 -- Benchmarking scoped effects #1: Catching errors
 module BenchCatch where
 
@@ -15,6 +16,9 @@ import qualified Polysemy.Reader              as P
 import qualified Sp.Eff                       as S
 import qualified Sp.Error                     as S
 import qualified Sp.Reader                    as S
+import qualified "hefty-freer-simple" Control.Monad.Freer    as HF
+import qualified "hefty-freer-simple" Control.Monad.Freer.Reader    as HF
+import qualified "hefty-freer-simple" Control.Monad.Freer.Error    as HF
 
 programSp :: (S.Throw () S.:> ef, S.Try () S.:> eh) => Int -> S.Eff eh ef a
 programSp = \case
@@ -60,6 +64,51 @@ catchSpDeep5 n = S.runEff $ run $ run $ run $ run $ run $ S.runThrow $ S.runTry 
   where
     run :: S.Eff eh (S.Ask () ': ef) a -> S.Eff eh ef a
     run = S.runAsk ()
+
+programHeftyFreer :: (HF.Member (HF.Error ()) ef, HF.MemberH (HF.Catch ()) eh) => Int -> HF.Eff eh ef a
+programHeftyFreer = \case
+  0 -> HF.throwError ()
+  n -> HF.sendH $ HF.Catch (programHeftyFreer (n - 1)) \() -> HF.throwError ()
+{-# NOINLINE programHeftyFreer #-}
+
+catchHeftyFreer :: Int -> Either () ()
+catchHeftyFreer n = HF.run $ HF.runError $ HF.runCatch @() $ programHeftyFreer n
+
+catchHeftyFreerDeep0 :: Int -> Either () ()
+catchHeftyFreerDeep0 n = HF.run $ run $ run $ run $ run $ run $ HF.runError $ run $ run $ run $ run $ run $ HF.runCatch @() $ programHeftyFreer n
+  where
+    run :: HF.Eff eh (HF.Reader () ': ef) a -> HF.Eff eh ef a
+    run = HF.runReader ()
+
+catchHeftyFreerDeep1 :: Int -> Either () ()
+catchHeftyFreerDeep1 n = HF.run $ run $ run $ run $ run $ run $ HF.runError $ run $ run $ run $ run $ HF.runCatch @() $ run $ programHeftyFreer n
+  where
+    run :: HF.Eff eh (HF.Reader () ': ef) a -> HF.Eff eh ef a
+    run = HF.runReader ()
+
+catchHeftyFreerDeep2 :: Int -> Either () ()
+catchHeftyFreerDeep2 n = HF.run $ run $ run $ run $ run $ run $ HF.runError $ run $ run $ run $ HF.runCatch @() $ run $ run $ programHeftyFreer n
+  where
+    run :: HF.Eff eh (HF.Reader () ': ef) a -> HF.Eff eh ef a
+    run = HF.runReader ()
+
+catchHeftyFreerDeep3 :: Int -> Either () ()
+catchHeftyFreerDeep3 n = HF.run $ run $ run $ run $ run $ run $ HF.runError $ run $ run $ HF.runCatch @() $ run $ run $ run $ programHeftyFreer n
+  where
+    run :: HF.Eff eh (HF.Reader () ': ef) a -> HF.Eff eh ef a
+    run = HF.runReader ()
+
+catchHeftyFreerDeep4 :: Int -> Either () ()
+catchHeftyFreerDeep4 n = HF.run $ run $ run $ run $ run $ run $ HF.runError $ run $ HF.runCatch @() $ run $ run $ run $ run $ programHeftyFreer n
+  where
+    run :: HF.Eff eh (HF.Reader () ': ef) a -> HF.Eff eh ef a
+    run = HF.runReader ()
+
+catchHeftyFreerDeep5 :: Int -> Either () ()
+catchHeftyFreerDeep5 n = HF.run $ run $ run $ run $ run $ run $ HF.runError $ HF.runCatch @() $ run $ run $ run $ run $ run $ programHeftyFreer n
+  where
+    run :: HF.Eff eh (HF.Reader () ': ef) a -> HF.Eff eh ef a
+    run = HF.runReader ()
 
 #if SPEFF_BENCH_EFFECTFUL
 programEffectful :: EL.Error () EL.:> es => Int -> EL.Eff es a

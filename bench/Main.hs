@@ -26,6 +26,8 @@ main = defaultMain
     , bench "freer.shallow" $ nf countdownFreer x
     , bench "freer.deep" $ nf countdownFreerDeep x
 #endif
+    , bench "hefty-freer.shallow" $ nf countdownHeftyFreer x
+    , bench "hefty-freer.deep" $ nf countdownHeftyFreerDeep x
     , bench "mtl.shallow" $ nf countdownMtl x
     , bench "mtl.deep" $ nf countdownMtlDeep x
     , bench "fused.shallow" $ nf countdownFused x
@@ -42,6 +44,8 @@ main = defaultMain
     , bench "freer.shallow" $ nf pythFreer x
     , bench "freer.deep" $ nf pythFreerDeep x
 #endif
+    , bench "hefty-freer.shallow" $ nf pythHeftyFreer x
+    , bench "hefty-freer.deep" $ nf pythHeftyFreerDeep x
     , bench "fused.shallow" $ nf pythFused x
     , bench "fused.deep" $ nf pythFusedDeep x
     , bench "sem.shallow" $ nf pythSem x
@@ -55,6 +59,13 @@ main = defaultMain
     , bench "sp_modified_for_non_scoped_resumption_support.deep3" $ nf catchSpDeep3 x
     , bench "sp_modified_for_non_scoped_resumption_support.deep4" $ nf catchSpDeep4 x
     , bench "sp_modified_for_non_scoped_resumption_support.deep5" $ nf catchSpDeep5 x
+    , bench "hefty-freer.shallow" $ nf catchHeftyFreer x
+    , bench "hefty-freer.deep0" $ nf catchHeftyFreerDeep0 x
+    , bench "hefty-freer.deep1" $ nf catchHeftyFreerDeep1 x
+    , bench "hefty-freer.deep2" $ nf catchHeftyFreerDeep2 x
+    , bench "hefty-freer.deep3" $ nf catchHeftyFreerDeep3 x
+    , bench "hefty-freer.deep4" $ nf catchHeftyFreerDeep4 x
+    , bench "hefty-freer.deep5" $ nf catchHeftyFreerDeep5 x
 #if SPEFF_BENCH_EFFECTFUL
     , bench "effectful.shallow" $ nf catchEffectful x
     , bench "effectful.deep" $ nf catchEffectfulDeep x
@@ -72,6 +83,13 @@ main = defaultMain
     , bench "sp_modified_for_non_scoped_resumption_support.deep3" $ nf localSpDeep3 x
     , bench "sp_modified_for_non_scoped_resumption_support.deep4" $ nf localSpDeep4 x
     , bench "sp_modified_for_non_scoped_resumption_support.deep5" $ nf localSpDeep5 x
+    , bench "hefty-freer.shallow" $ nf localHeftyFreer x
+    , bench "hefty-freer.deep0" $ nf localHeftyFreerDeep0 x
+    , bench "hefty-freer.deep1" $ nf localHeftyFreerDeep1 x
+    , bench "hefty-freer.deep2" $ nf localHeftyFreerDeep2 x
+    , bench "hefty-freer.deep3" $ nf localHeftyFreerDeep3 x
+    , bench "hefty-freer.deep4" $ nf localHeftyFreerDeep4 x
+    , bench "hefty-freer.deep5" $ nf localHeftyFreerDeep5 x
 #if SPEFF_BENCH_EFFECTFUL
     , bench "effectful.shallow" $ nf localEffectful x
     , bench "effectful.deep" $ nf localEffectfulDeep x
@@ -88,6 +106,8 @@ main = defaultMain
     , bench "mp.deep" $ nf coroutineMpDeep x
     , bench "freer.shallow" $ nf coroutineFreer x
     , bench "freer.deep" $ nf coroutineFreerDeep x
+    , bench "hefty-freer.shallow" $ nf coroutineHeftyFreer x
+    , bench "hefty-freer.deep" $ nf coroutineHeftyFreerDeep x
     , bench "eff.shallow" $ nf coroutineEff x
     , bench "eff.deep" $ nf coroutineEffDeep x
     ]

@@ -1,11 +1,16 @@
+{-# LANGUAGE PackageImports #-}
+
 module BenchCoroutine where
 
 import qualified Sp.Eff                        as S
 import qualified Sp.Reader                     as S
 import qualified Sp.Coroutine                  as S
-import qualified Control.Monad.Freer           as FS
-import qualified Control.Monad.Freer.Coroutine as FS
-import qualified Control.Monad.Freer.Reader as FS
+import qualified "freer-simple" Control.Monad.Freer           as FS
+import qualified "freer-simple"Control.Monad.Freer.Coroutine as FS
+import qualified "freer-simple"Control.Monad.Freer.Reader as FS
+import qualified "hefty-freer-simple" Control.Monad.Freer           as HF
+import qualified "hefty-freer-simple"Control.Monad.Freer.Coroutine as HF
+import qualified "hefty-freer-simple"Control.Monad.Freer.Reader as HF
 import qualified Control.Mp.Eff as M
 import qualified Control.Mp.Util as M
 import Control.Monad (forM)
@@ -65,6 +70,24 @@ coroutineFreer n = FS.run $ loopStatusFreer =<< FS.runC (programFreer n)
 coroutineFreerDeep :: Int -> [Int]
 coroutineFreerDeep n = FS.run $ run $ run $ run $ run $ run $ loopStatusFreer =<< FS.runC (run $ run $ run $ run $ run $ programFreer n)
   where run = FS.runReader ()
+
+programHeftyFreer :: HF.Member (HF.Yield Int Int) es => Int -> HF.Eff '[] es [Int]
+programHeftyFreer upbound =
+    forM [1..upbound] \i -> HF.yield i id
+{-# NOINLINE programHeftyFreer #-}
+
+loopStatusHeftyFreer :: HF.Status es Int Int r -> HF.Eff '[] es r
+loopStatusHeftyFreer = \case
+    HF.Done r -> pure r
+    HF.Continue i f -> loopStatusHeftyFreer =<< f (i+100)
+{-# NOINLINE loopStatusHeftyFreer #-}
+
+coroutineHeftyFreer :: Int -> [Int]
+coroutineHeftyFreer n = HF.run $ loopStatusHeftyFreer =<< HF.runC (programHeftyFreer n)
+
+coroutineHeftyFreerDeep :: Int -> [Int]
+coroutineHeftyFreerDeep n = HF.run $ run $ run $ run $ run $ run $ loopStatusHeftyFreer =<< HF.runC (run $ run $ run $ run $ run $ programHeftyFreer n)
+  where run = HF.runReader ()
 
 programEff :: E.Coroutine Int Int E.:< es => Int -> E.Eff es [Int]
 programEff upbound =

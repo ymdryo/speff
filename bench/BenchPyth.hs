@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE PackageImports #-}
 -- Benchmarking yield-intensive code
 module BenchPyth where
 
@@ -9,9 +10,9 @@ import qualified Control.Carrier.Reader        as F
 import qualified Control.Ev.Eff                as E
 import qualified Control.Ev.Util               as E
 #ifdef SPEFF_BENCH_FREER_SIMPLE
-import qualified Control.Monad.Freer           as FS
-import qualified Control.Monad.Freer.NonDet    as FS
-import qualified Control.Monad.Freer.Reader    as FS
+import qualified "freer-simple" Control.Monad.Freer           as FS
+import qualified "freer-simple" Control.Monad.Freer.NonDet    as FS
+import qualified "freer-simple" Control.Monad.Freer.Reader    as FS
 #endif
 import qualified Polysemy                      as P
 import qualified Polysemy.NonDet               as P
@@ -19,6 +20,9 @@ import qualified Polysemy.Reader               as P
 import qualified Sp.Eff                        as S
 import qualified Sp.NonDet                     as S
 import qualified Sp.Reader                     as S
+import qualified "hefty-freer-simple" Control.Monad.Freer           as HF
+import qualified "hefty-freer-simple" Control.Monad.Freer.NonDet    as HF
+import qualified "hefty-freer-simple" Control.Monad.Freer.Reader    as HF
 
 programSp :: (S.NonDet S.:> ef) => Int -> S.Eff eh ef (Int, Int, Int)
 programSp upbound = do
@@ -69,6 +73,24 @@ pythFreerDeep :: Int -> [(Int, Int, Int)]
 pythFreerDeep n = FS.run $ run $ run $ run $ run $ run $ FS.makeChoiceA $ run $ run $ run $ run $ run $ programFreer n
   where run = FS.runReader ()
 #endif
+
+programHeftyFreer :: HF.Member HF.NonDet es => Int -> HF.Eff '[] es (Int, Int, Int)
+programHeftyFreer upbound = do
+  x <- choice upbound
+  y <- choice upbound
+  z <- choice upbound
+  if x*x + y*y == z*z then return (x,y,z) else empty
+  where
+    choice 0 = empty
+    choice n = choice (n - 1) <|> pure n
+{-# NOINLINE programHeftyFreer #-}
+
+pythHeftyFreer :: Int -> [(Int, Int, Int)]
+pythHeftyFreer n = HF.run $ HF.makeChoiceA $ programHeftyFreer n
+
+pythHeftyFreerDeep :: Int -> [(Int, Int, Int)]
+pythHeftyFreerDeep n = HF.run $ run $ run $ run $ run $ run $ HF.makeChoiceA $ run $ run $ run $ run $ run $ programHeftyFreer n
+  where run = HF.runReader ()
 
 programFused :: (Monad m, Alternative m) => Int -> m (Int, Int, Int)
 programFused upbound = do

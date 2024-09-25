@@ -1,25 +1,24 @@
+{-# LANGUAGE PackageImports #-}
 module Sp.Test where
 
-import Sp.Eff
+import "hefty-freer-simple" Control.Monad.Freer
+import "hefty-freer-simple" Control.Monad.Freer.Coroutine
+import "hefty-freer-simple" Control.Monad.Freer.State
+import "hefty-freer-simple" Control.Monad.Freer.Reader
 import Control.Monad.IO.Class (liftIO)
-import Sp.Coroutine
-import Sp.State
-import Sp.Reader
 
--- rather `effTest`.
--- coroutine semantics test for `eff`.
 coroutine :: IO ()
-coroutine = runIOE do
-    stat <- runCoroutine @Int @Int do
-        r <- send $ Yield @Int @Int 0
-        unsafeIO $ putStrLn $ "reply: " <> show r
-        _ <- send $ Yield @Int @Int 100
+coroutine = runM do
+    stat <- runC @Int @Int do
+        r <- yield @Int @Int 0 id
+        liftIO $ putStrLn $ "reply: " <> show r
+        _ <- yield @Int @Int 100 id
         pure ()
 
     case stat of
-        Done n -> unsafeIO $ print n
+        Done n -> liftIO $ print n
         Continue n k -> do
-            unsafeIO $ putStrLn $ "yielded: " <> show n
+            liftIO $ putStrLn $ "yielded: " <> show n
             stat' <- k 20
             case stat' of
                 Done () -> liftIO $ putStrLn "Done."
@@ -38,7 +37,7 @@ spTest = do
     coroutine
 
 spTestOk :: IO ()
-spTestOk = runIOE . runAsk @Int 0 . fmap fst . runStatePure "A" . runLocal @Int $ do
+spTestOk = runM . runReader @Int 0 . fmap fst . runState "A" . runLocal @Int $ do
     s0 :: String <- send Get
     sendH $ Local @Int (+1) do
         send $ Put $ s0 <> "B"
@@ -46,8 +45,9 @@ spTestOk = runIOE . runAsk @Int 0 . fmap fst . runStatePure "A" . runLocal @Int 
     liftIO . print @String =<< send Get
 
 spTestRec :: IO ()
-spTestRec = runIOE . runAsk @Int 0 . runLocal @Int . fmap fst . runStatePureRec "A" $ do
+spTestRec = runM . runReader @Int 0 . runLocal @Int . runStateRec "A" $ do
     s0 :: String <- send Get
+    send $ Put $ s0 <> "C"
     sendH $ Local @Int (+1) do
         send $ Put $ s0 <> "B"
         liftIO . print @Int =<< send Ask
