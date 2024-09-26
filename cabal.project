@@ -19,7 +19,7 @@ source-repository-package
 source-repository-package
     type: git
     location: https://github.com/ymdryo/hefty-freer-simple.git
-    tag: ac0aa83817665ecd4f75018b546b947408190312
+    tag: 86c56191cc6dc72dd06a541c1bd65b5f70e7a023
 
 source-repository-package
     type: git

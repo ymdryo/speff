@@ -14,8 +14,8 @@ main = defaultMain
   [ bgroup "countdown" $ [10000] <&> \x -> bgroup (show x)
     [ bench "sp_modified_for_non_scoped_resumption_support.shallow" $ nf countdownSp x
     , bench "sp_modified_for_non_scoped_resumption_support.deep" $ nf countdownSpDeep x
-    , bench "sp_modified_for_non_scoped_resumption_support.shallowIO" $ nf countdownSpIO x
-    , bench "sp_modified_for_non_scoped_resumption_support.deepIO" $ nf countdownSpDeepIO x
+    , bench "sp_modified_for_non_scoped_resumption_support.IO.shallow" $ nf countdownSpIO x
+    , bench "sp_modified_for_non_scoped_resumption_support.IO.deep" $ nf countdownSpDeepIO x
 #if SPEFF_BENCH_EFFECTFUL
     , bench "effectful.shallow" $ nf countdownEffectful x
     , bench "effectful.deep" $ nf countdownEffectfulDeep x
@@ -28,6 +28,8 @@ main = defaultMain
 #endif
     , bench "hefty-freer.shallow" $ nf countdownHeftyFreer x
     , bench "hefty-freer.deep" $ nf countdownHeftyFreerDeep x
+    , bench "hefty-freer.IO.shallow" $ nf countdownHeftyFreerIO x
+    , bench "hefty-freer.IO.deep" $ nf countdownHeftyFreerDeepIO x
     , bench "mtl.shallow" $ nf countdownMtl x
     , bench "mtl.deep" $ nf countdownMtlDeep x
     , bench "fused.shallow" $ nf countdownFused x

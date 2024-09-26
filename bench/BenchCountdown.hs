@@ -29,6 +29,7 @@ import qualified Sp.State                     as S
 import qualified "hefty-freer-simple" Control.Monad.Freer          as HF
 import qualified "hefty-freer-simple" Control.Monad.Freer.Reader   as HF
 import qualified "hefty-freer-simple" Control.Monad.Freer.State    as HF
+import System.IO.Unsafe (unsafePerformIO)
 
 programSp :: S.State Int S.:> ef => S.Eff eh ef Int
 programSp = do
@@ -125,6 +126,13 @@ countdownHeftyFreer n = HF.run $ HF.runState n programHeftyFreer
 
 countdownHeftyFreerDeep :: Int -> (Int, Int)
 countdownHeftyFreerDeep n = HF.run $ runR $ runR $ runR $ runR $ runR $ HF.runState n $ runR $ runR $ runR $ runR $ runR $ programHeftyFreer
+  where runR = HF.runReader ()
+
+countdownHeftyFreerIO :: Int -> (Int, Int)
+countdownHeftyFreerIO n = unsafePerformIO $ HF.runM $ HF.runStateIO n programHeftyFreer
+
+countdownHeftyFreerDeepIO :: Int -> (Int, Int)
+countdownHeftyFreerDeepIO n = unsafePerformIO $ HF.runM $ runR $ runR $ runR $ runR $ runR $ HF.runStateIO n $ runR $ runR $ runR $ runR $ runR $ programHeftyFreer
   where runR = HF.runReader ()
 
 programMtl :: M.MonadState Int m => m Int
